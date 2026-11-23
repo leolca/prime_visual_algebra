@@ -163,6 +163,259 @@ def render_kandinsky_layer(p: int, k: int, size: int = 100) -> Tuple[np.ndarray,
     return arr[:, :, :3], arr[:, :, 3] > 0
 
 
+def klee_color_rgb(p: int) -> Tuple[int, int, int]:
+    idx = PRIME_INDEX[p]
+    if idx < len(KLEE_PALETTE):
+        return hex_to_rgb(KLEE_PALETTE[idx])
+    hue = (idx * 137.508 + 24) % 360
+    return hsl_to_rgb(hue, 54.0, 46.0)
+
+
+def render_klee_attenuation(p: int, exp: int, size: int = 100) -> np.ndarray:
+    """Return float32 multiplicative attenuation array of shape (size, size, 3) in (0, 1]."""
+    p_idx = PRIME_INDEX[p]
+    seed = ((p * 2654435761) ^ 0x9E3779B9) & 0xFFFFFFFF
+    rand = mulberry32(seed)
+    color = np.array(klee_color_rgb(p), dtype=np.float32) / 255.0
+
+    margin = size * 0.08
+    span = size - 2 * margin
+    stroke_w = size * (0.09 + rand() * 0.09)
+    jump = stroke_w * 1.3
+    horizontal = (p_idx % 2 == 0)
+
+    pos = margin + rand() * span
+    track = margin + stroke_w * 0.5 + rand() * max(1.0, span - stroke_w)
+    remaining = exp * span * 0.95
+
+    atten = np.ones((size, size, 3), dtype=np.float32)
+    guard = 0
+    while remaining > 0.5 and guard < 40:
+        guard += 1
+        avail = (margin + span) - pos
+        seg_len = min(remaining, max(2.0, avail))
+
+        for w_idx in range(2):
+            wobble = lambda: (rand() - 0.5) * stroke_w * 0.14
+            half_w = stroke_w * (0.48 + w_idx * 0.06)
+            pts: List[Tuple[float, float]] = []
+            steps = 5
+            if horizontal:
+                for i in range(steps + 1):
+                    t = i / steps
+                    pts.append((pos + seg_len * t + wobble() * 0.3, track - half_w + wobble()))
+                for i in range(steps, -1, -1):
+                    t = i / steps
+                    pts.append((pos + seg_len * t + wobble() * 0.3, track + half_w + wobble()))
+            else:
+                for i in range(steps + 1):
+                    t = i / steps
+                    pts.append((track - half_w + wobble(), pos + seg_len * t + wobble() * 0.3))
+                for i in range(steps, -1, -1):
+                    t = i / steps
+                    pts.append((track + half_w + wobble(), pos + seg_len * t + wobble() * 0.3))
+
+            mask_img = Image.new("L", (size, size), 0)
+            ImageDraw.Draw(mask_img).polygon(pts, fill=255)
+            m = np.array(mask_img) > 0
+            alpha = 0.42 if w_idx == 0 else 0.28
+            atten[m] *= (1.0 - alpha) + alpha * color
+
+        remaining -= seg_len
+        if remaining > 0.5:
+            pos = margin
+            track += jump
+            if track > margin + span - stroke_w * 0.3:
+                track = margin + ((track - margin) % max(stroke_w, span - stroke_w * 0.5))
+
+    return atten
+
+
+def test_klee_uniqueness_and_peeling(max_n: int = 120, size: int = 100) -> None:
+    bg = np.array(hex_to_rgb("#f6f0e2"), dtype=np.float32)
+
+    # Precompute attenuation for every (p, e)
+    attens: Dict[Tuple[int, int], np.ndarray] = {}
+    for p in PRIMES:
+        max_exp = int(math.floor(math.log(max_n, p)))
+        for e in range(1, max_exp + 1):
+            attens[(p, e)] = render_klee_attenuation(p, e, size)
+
+    # Render all 1..max_n
+    rendered: Dict[int, np.ndarray] = {}
+    hashes: Dict[bytes, List[int]] = {}
+    for n in range(1, max_n + 1):
+        canvas = np.broadcast_to(bg, (size, size, 3)).copy()
+        for p, e in sorted(factorize(n).items()):
+            canvas *= attens[(p, e)]
+        img_u8 = np.clip(np.round(canvas), 0, 255).astype(np.uint8)
+        rendered[n] = img_u8
+        hashes.setdefault(img_u8.tobytes(), []).append(n)
+
+    collisions = [ns for ns in hashes.values() if len(ns) > 1]
+    print(f"[klee] Unique images: {len(hashes)}/{max_n} (collisions: {len(collisions)})")
+
+    # Blind multiplicative glaze peeling:
+    # Check each prime p from largest to smallest, and largest exponent e first.
+    # Since multiply only darkens (atten <= 1), if (p, e) is present, every pixel of (p, e)
+    # must satisfy residual <= bg * atten(p, e) + tolerance (for uint8 rounding).
+    # To avoid false positives from overlap of other primes, we also require that
+    # peeling (p, e) leaves residual <= bg + tolerance everywhere, and we prefer the
+    # highest e whose unoccluded/darkened footprint fits cleanly.
+    errors = 0
+    for n in range(1, max_n + 1):
+        residual = rendered[n].astype(np.float32) / bg  # in (0, 1]
+        recovered: Dict[int, int] = {}
+        for p in sorted(PRIMES, reverse=True):
+            max_exp = int(math.floor(math.log(max_n, p)))
+            for e in range(max_exp, 0, -1):
+                att = attens[(p, e)]
+                mask = np.any(att < 0.999, axis=2)
+                if not np.any(mask):
+                    continue
+                # Every pixel in (p, e)'s footprint must be at least as dark as att (within uint8 rounding)
+                # i.e. residual <= att + 2.5 / bg_min
+                if np.all(residual[mask] <= att[mask] + 0.015):
+                    recovered[p] = e
+                    residual[mask] = np.minimum(1.0, residual[mask] / np.maximum(att[mask], 1e-4))
+                    break
+
+        if recovered != factorize(n):
+            errors += 1
+            if errors <= 5:
+                print(f"  Klee mismatch for n={n}: true={factorize(n)}, recovered={recovered}")
+
+    print(f"[klee] Blind multiplicative peeling: {max_n - errors}/{max_n} exact ({errors} errors)")
+
+
+def test_pollock_glaze_homomorphism(max_n: int = 120, size: int = 100) -> None:
+    """Verify pixel-level homomorphism, uniqueness, and multiplicative peeling for Pollock Glaze mode."""
+    bg = np.array(hex_to_rgb("#f4efe6"), dtype=np.float32)
+    alpha = 0.45 * 0.88  # base alpha * stroke alpha
+
+    prime_attens: Dict[int, np.ndarray] = {}
+    for p in PRIMES:
+        rgb, mask = render_pollock_layer(p, 1, size=size, steps=32)
+        att = np.ones((size, size, 3), dtype=np.float32)
+        col = rgb.astype(np.float32) / 255.0
+        att[mask] = (1.0 - alpha) + alpha * col[mask]
+        prime_attens[p] = att
+
+    # Render exact float attenuation for each n = 1..max_n
+    rendered_float: Dict[int, np.ndarray] = {}
+    rendered_u8: Dict[int, np.ndarray] = {}
+    hashes: Dict[bytes, List[int]] = {}
+    for n in range(1, max_n + 1):
+        att = np.ones((size, size, 3), dtype=np.float32)
+        for p, e in factorize(n).items():
+            att *= (prime_attens[p] ** e)
+        rendered_float[n] = att
+        u8 = np.clip(np.round(bg * att), 0, 255).astype(np.uint8)
+        rendered_u8[n] = u8
+        hashes.setdefault(u8.tobytes(), []).append(n)
+
+    # Check pixel-level homomorphism: I(a*b) == bg * (I(a)/bg) * (I(b)/bg)
+    hom_errors = 0
+    for a in range(1, max_n + 1):
+        for b in range(a, max_n // a + 1):
+            prod = rendered_float[a] * rendered_float[b]
+            if not np.allclose(prod, rendered_float[a * b], atol=1e-5):
+                hom_errors += 1
+
+    # Blind multiplicative peeling on uint8 renders
+    peel_errors = 0
+    for n in range(1, max_n + 1):
+        residual = rendered_u8[n].astype(np.float32) / bg
+        recovered: Dict[int, int] = {}
+        for p in sorted(PRIMES, reverse=True):
+            att_p = prime_attens[p]
+            mask = np.any(att_p < 0.999, axis=2)
+            if not np.any(mask):
+                continue
+            max_exp = int(math.floor(math.log(max_n, p)))
+            for e in range(max_exp, 0, -1):
+                att_pe = att_p ** e
+                if np.all(residual[mask] <= att_pe[mask] + 0.015):
+                    recovered[p] = e
+                    residual[mask] = np.minimum(1.0, residual[mask] / np.maximum(att_pe[mask], 1e-4))
+                    break
+        if recovered != factorize(n):
+            peel_errors += 1
+
+    print(f"[pollock_glaze] Pixel homomorphism errors: {hom_errors}")
+    print(f"[pollock_glaze] Unique images: {len(hashes)}/{max_n}")
+    print(f"[pollock_glaze] Blind multiplicative peeling: {max_n - peel_errors}/{max_n} exact ({peel_errors} errors)")
+
+
+def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> None:
+    """Verify vector-space homomorphism gamma_{a*b} = gamma_a + gamma_b and image uniqueness."""
+    def prime_modes(p: int):
+        seed = ((p * 2654435761) ^ 0x7F4A7C15) & 0xFFFFFFFF
+        rand = mulberry32(seed)
+        modes = []
+        for m in range(1, 7):
+            amp = 0.13 / math.sqrt(m)
+            modes.append((
+                1 + int(rand() * 7),
+                1 + int(rand() * 7),
+                rand() * math.pi * 2,
+                rand() * math.pi * 2,
+                amp * (0.6 + 0.8 * rand()),
+                amp * (0.6 + 0.8 * rand()),
+            ))
+        return modes
+
+    num_pts = 64
+    ts = np.linspace(0.0, 1.0, num_pts + 1)
+    prime_curves: Dict[int, np.ndarray] = {}
+    for p in PRIMES:
+        modes = prime_modes(p)
+        dx = np.zeros_like(ts)
+        dy = np.zeros_like(ts)
+        for fx, fy, px, py, ax, ay in modes:
+            dx += ax * np.cos(2 * math.pi * fx * ts + px)
+            dy += ay * np.sin(2 * math.pi * fy * ts + py)
+        prime_curves[p] = np.stack([dx, dy], axis=1)
+
+    curves: Dict[int, np.ndarray] = {}
+    hashes: Dict[bytes, List[int]] = {}
+    bg = hex_to_rgb("#f4efe6")
+    for n in range(1, max_n + 1):
+        facs = factorize(n)
+        gamma = np.zeros((num_pts + 1, 2), dtype=np.float64)
+        for p, e in facs.items():
+            gamma += e * prime_curves[p]
+        curves[n] = gamma
+
+        # Render image
+        img = Image.new("RGB", (size, size), bg)
+        draw = ImageDraw.Draw(img)
+        if facs:
+            sx = sum(e * math.cos(math.radians((PRIME_INDEX[p] * 137.508 + 18) % 360)) for p, e in facs.items())
+            sy = sum(e * math.sin(math.radians((PRIME_INDEX[p] * 137.508 + 18) % 360)) for p, e in facs.items())
+            hue = (math.degrees(math.atan2(sy, sx)) + 360) % 360
+            col = hsl_to_rgb(hue, 74.0, 40.0)
+            margin = size * 0.06
+            span = size - 2 * margin
+            pts = [
+                (margin + (((0.5 + x) % 1.0) * span), margin + (((0.5 + y) % 1.0) * span))
+                for x, y in gamma
+            ]
+            for i in range(len(pts) - 1):
+                if math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) <= span * 0.45:
+                    draw.line([pts[i], pts[i + 1]], fill=col, width=2)
+        hashes.setdefault(np.array(img).tobytes(), []).append(n)
+
+    hom_errors = 0
+    for a in range(1, max_n + 1):
+        for b in range(a, max_n // a + 1):
+            if not np.allclose(curves[a] + curves[b], curves[a * b], atol=1e-12):
+                hom_errors += 1
+
+    print(f"[pollock_trajectory] Vector homomorphism errors: {hom_errors}")
+    print(f"[pollock_trajectory] Unique images: {len(hashes)}/{max_n}")
+
+
 def render_pollock_layer(p: int, k: int, size: int = 100, steps: int = 32) -> Tuple[np.ndarray, np.ndarray]:
     p_idx = PRIME_INDEX[p]
     seed = ((p * 2654435761) ^ (k * 40503311)) & 0xFFFFFFFF
@@ -211,6 +464,259 @@ def render_pollock_layer(p: int, k: int, size: int = 100, steps: int = 32) -> Tu
 
     arr = np.array(img)
     return arr[:, :, :3], arr[:, :, 3] > 0
+
+
+def klee_color_rgb(p: int) -> Tuple[int, int, int]:
+    idx = PRIME_INDEX[p]
+    if idx < len(KLEE_PALETTE):
+        return hex_to_rgb(KLEE_PALETTE[idx])
+    hue = (idx * 137.508 + 24) % 360
+    return hsl_to_rgb(hue, 54.0, 46.0)
+
+
+def render_klee_attenuation(p: int, exp: int, size: int = 100) -> np.ndarray:
+    """Return float32 multiplicative attenuation array of shape (size, size, 3) in (0, 1]."""
+    p_idx = PRIME_INDEX[p]
+    seed = ((p * 2654435761) ^ 0x9E3779B9) & 0xFFFFFFFF
+    rand = mulberry32(seed)
+    color = np.array(klee_color_rgb(p), dtype=np.float32) / 255.0
+
+    margin = size * 0.08
+    span = size - 2 * margin
+    stroke_w = size * (0.09 + rand() * 0.09)
+    jump = stroke_w * 1.3
+    horizontal = (p_idx % 2 == 0)
+
+    pos = margin + rand() * span
+    track = margin + stroke_w * 0.5 + rand() * max(1.0, span - stroke_w)
+    remaining = exp * span * 0.95
+
+    atten = np.ones((size, size, 3), dtype=np.float32)
+    guard = 0
+    while remaining > 0.5 and guard < 40:
+        guard += 1
+        avail = (margin + span) - pos
+        seg_len = min(remaining, max(2.0, avail))
+
+        for w_idx in range(2):
+            wobble = lambda: (rand() - 0.5) * stroke_w * 0.14
+            half_w = stroke_w * (0.48 + w_idx * 0.06)
+            pts: List[Tuple[float, float]] = []
+            steps = 5
+            if horizontal:
+                for i in range(steps + 1):
+                    t = i / steps
+                    pts.append((pos + seg_len * t + wobble() * 0.3, track - half_w + wobble()))
+                for i in range(steps, -1, -1):
+                    t = i / steps
+                    pts.append((pos + seg_len * t + wobble() * 0.3, track + half_w + wobble()))
+            else:
+                for i in range(steps + 1):
+                    t = i / steps
+                    pts.append((track - half_w + wobble(), pos + seg_len * t + wobble() * 0.3))
+                for i in range(steps, -1, -1):
+                    t = i / steps
+                    pts.append((track + half_w + wobble(), pos + seg_len * t + wobble() * 0.3))
+
+            mask_img = Image.new("L", (size, size), 0)
+            ImageDraw.Draw(mask_img).polygon(pts, fill=255)
+            m = np.array(mask_img) > 0
+            alpha = 0.42 if w_idx == 0 else 0.28
+            atten[m] *= (1.0 - alpha) + alpha * color
+
+        remaining -= seg_len
+        if remaining > 0.5:
+            pos = margin
+            track += jump
+            if track > margin + span - stroke_w * 0.3:
+                track = margin + ((track - margin) % max(stroke_w, span - stroke_w * 0.5))
+
+    return atten
+
+
+def test_klee_uniqueness_and_peeling(max_n: int = 120, size: int = 100) -> None:
+    bg = np.array(hex_to_rgb("#f6f0e2"), dtype=np.float32)
+
+    # Precompute attenuation for every (p, e)
+    attens: Dict[Tuple[int, int], np.ndarray] = {}
+    for p in PRIMES:
+        max_exp = int(math.floor(math.log(max_n, p)))
+        for e in range(1, max_exp + 1):
+            attens[(p, e)] = render_klee_attenuation(p, e, size)
+
+    # Render all 1..max_n
+    rendered: Dict[int, np.ndarray] = {}
+    hashes: Dict[bytes, List[int]] = {}
+    for n in range(1, max_n + 1):
+        canvas = np.broadcast_to(bg, (size, size, 3)).copy()
+        for p, e in sorted(factorize(n).items()):
+            canvas *= attens[(p, e)]
+        img_u8 = np.clip(np.round(canvas), 0, 255).astype(np.uint8)
+        rendered[n] = img_u8
+        hashes.setdefault(img_u8.tobytes(), []).append(n)
+
+    collisions = [ns for ns in hashes.values() if len(ns) > 1]
+    print(f"[klee] Unique images: {len(hashes)}/{max_n} (collisions: {len(collisions)})")
+
+    # Blind multiplicative glaze peeling:
+    # Check each prime p from largest to smallest, and largest exponent e first.
+    # Since multiply only darkens (atten <= 1), if (p, e) is present, every pixel of (p, e)
+    # must satisfy residual <= bg * atten(p, e) + tolerance (for uint8 rounding).
+    # To avoid false positives from overlap of other primes, we also require that
+    # peeling (p, e) leaves residual <= bg + tolerance everywhere, and we prefer the
+    # highest e whose unoccluded/darkened footprint fits cleanly.
+    errors = 0
+    for n in range(1, max_n + 1):
+        residual = rendered[n].astype(np.float32) / bg  # in (0, 1]
+        recovered: Dict[int, int] = {}
+        for p in sorted(PRIMES, reverse=True):
+            max_exp = int(math.floor(math.log(max_n, p)))
+            for e in range(max_exp, 0, -1):
+                att = attens[(p, e)]
+                mask = np.any(att < 0.999, axis=2)
+                if not np.any(mask):
+                    continue
+                # Every pixel in (p, e)'s footprint must be at least as dark as att (within uint8 rounding)
+                # i.e. residual <= att + 2.5 / bg_min
+                if np.all(residual[mask] <= att[mask] + 0.015):
+                    recovered[p] = e
+                    residual[mask] = np.minimum(1.0, residual[mask] / np.maximum(att[mask], 1e-4))
+                    break
+
+        if recovered != factorize(n):
+            errors += 1
+            if errors <= 5:
+                print(f"  Klee mismatch for n={n}: true={factorize(n)}, recovered={recovered}")
+
+    print(f"[klee] Blind multiplicative peeling: {max_n - errors}/{max_n} exact ({errors} errors)")
+
+
+def test_pollock_glaze_homomorphism(max_n: int = 120, size: int = 100) -> None:
+    """Verify pixel-level homomorphism, uniqueness, and multiplicative peeling for Pollock Glaze mode."""
+    bg = np.array(hex_to_rgb("#f4efe6"), dtype=np.float32)
+    alpha = 0.45 * 0.88  # base alpha * stroke alpha
+
+    prime_attens: Dict[int, np.ndarray] = {}
+    for p in PRIMES:
+        rgb, mask = render_pollock_layer(p, 1, size=size, steps=32)
+        att = np.ones((size, size, 3), dtype=np.float32)
+        col = rgb.astype(np.float32) / 255.0
+        att[mask] = (1.0 - alpha) + alpha * col[mask]
+        prime_attens[p] = att
+
+    # Render exact float attenuation for each n = 1..max_n
+    rendered_float: Dict[int, np.ndarray] = {}
+    rendered_u8: Dict[int, np.ndarray] = {}
+    hashes: Dict[bytes, List[int]] = {}
+    for n in range(1, max_n + 1):
+        att = np.ones((size, size, 3), dtype=np.float32)
+        for p, e in factorize(n).items():
+            att *= (prime_attens[p] ** e)
+        rendered_float[n] = att
+        u8 = np.clip(np.round(bg * att), 0, 255).astype(np.uint8)
+        rendered_u8[n] = u8
+        hashes.setdefault(u8.tobytes(), []).append(n)
+
+    # Check pixel-level homomorphism: I(a*b) == bg * (I(a)/bg) * (I(b)/bg)
+    hom_errors = 0
+    for a in range(1, max_n + 1):
+        for b in range(a, max_n // a + 1):
+            prod = rendered_float[a] * rendered_float[b]
+            if not np.allclose(prod, rendered_float[a * b], atol=1e-5):
+                hom_errors += 1
+
+    # Blind multiplicative peeling on uint8 renders
+    peel_errors = 0
+    for n in range(1, max_n + 1):
+        residual = rendered_u8[n].astype(np.float32) / bg
+        recovered: Dict[int, int] = {}
+        for p in sorted(PRIMES, reverse=True):
+            att_p = prime_attens[p]
+            mask = np.any(att_p < 0.999, axis=2)
+            if not np.any(mask):
+                continue
+            max_exp = int(math.floor(math.log(max_n, p)))
+            for e in range(max_exp, 0, -1):
+                att_pe = att_p ** e
+                if np.all(residual[mask] <= att_pe[mask] + 0.015):
+                    recovered[p] = e
+                    residual[mask] = np.minimum(1.0, residual[mask] / np.maximum(att_pe[mask], 1e-4))
+                    break
+        if recovered != factorize(n):
+            peel_errors += 1
+
+    print(f"[pollock_glaze] Pixel homomorphism errors: {hom_errors}")
+    print(f"[pollock_glaze] Unique images: {len(hashes)}/{max_n}")
+    print(f"[pollock_glaze] Blind multiplicative peeling: {max_n - peel_errors}/{max_n} exact ({peel_errors} errors)")
+
+
+def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> None:
+    """Verify vector-space homomorphism gamma_{a*b} = gamma_a + gamma_b and image uniqueness."""
+    def prime_modes(p: int):
+        seed = ((p * 2654435761) ^ 0x7F4A7C15) & 0xFFFFFFFF
+        rand = mulberry32(seed)
+        modes = []
+        for m in range(1, 7):
+            amp = 0.13 / math.sqrt(m)
+            modes.append((
+                1 + int(rand() * 7),
+                1 + int(rand() * 7),
+                rand() * math.pi * 2,
+                rand() * math.pi * 2,
+                amp * (0.6 + 0.8 * rand()),
+                amp * (0.6 + 0.8 * rand()),
+            ))
+        return modes
+
+    num_pts = 64
+    ts = np.linspace(0.0, 1.0, num_pts + 1)
+    prime_curves: Dict[int, np.ndarray] = {}
+    for p in PRIMES:
+        modes = prime_modes(p)
+        dx = np.zeros_like(ts)
+        dy = np.zeros_like(ts)
+        for fx, fy, px, py, ax, ay in modes:
+            dx += ax * np.cos(2 * math.pi * fx * ts + px)
+            dy += ay * np.sin(2 * math.pi * fy * ts + py)
+        prime_curves[p] = np.stack([dx, dy], axis=1)
+
+    curves: Dict[int, np.ndarray] = {}
+    hashes: Dict[bytes, List[int]] = {}
+    bg = hex_to_rgb("#f4efe6")
+    for n in range(1, max_n + 1):
+        facs = factorize(n)
+        gamma = np.zeros((num_pts + 1, 2), dtype=np.float64)
+        for p, e in facs.items():
+            gamma += e * prime_curves[p]
+        curves[n] = gamma
+
+        # Render image
+        img = Image.new("RGB", (size, size), bg)
+        draw = ImageDraw.Draw(img)
+        if facs:
+            sx = sum(e * math.cos(math.radians((PRIME_INDEX[p] * 137.508 + 18) % 360)) for p, e in facs.items())
+            sy = sum(e * math.sin(math.radians((PRIME_INDEX[p] * 137.508 + 18) % 360)) for p, e in facs.items())
+            hue = (math.degrees(math.atan2(sy, sx)) + 360) % 360
+            col = hsl_to_rgb(hue, 74.0, 40.0)
+            margin = size * 0.06
+            span = size - 2 * margin
+            pts = [
+                (margin + (((0.5 + x) % 1.0) * span), margin + (((0.5 + y) % 1.0) * span))
+                for x, y in gamma
+            ]
+            for i in range(len(pts) - 1):
+                if math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) <= span * 0.45:
+                    draw.line([pts[i], pts[i + 1]], fill=col, width=2)
+        hashes.setdefault(np.array(img).tobytes(), []).append(n)
+
+    hom_errors = 0
+    for a in range(1, max_n + 1):
+        for b in range(a, max_n // a + 1):
+            if not np.allclose(curves[a] + curves[b], curves[a * b], atol=1e-12):
+                hom_errors += 1
+
+    print(f"[pollock_trajectory] Vector homomorphism errors: {hom_errors}")
+    print(f"[pollock_trajectory] Unique images: {len(hashes)}/{max_n}")
 
 
 def test_uniqueness_and_peeling(mode: str, max_n: int = 120, size: int = 100) -> None:
@@ -271,12 +777,61 @@ def test_uniqueness_and_peeling(mode: str, max_n: int = 120, size: int = 100) ->
     print(f"[{mode}] Blind peeling decomposition: {max_n - errors}/{max_n} exact ({errors} errors)")
 
 
-if __name__ == "__main__":
-    # 1. Mode 1 (Binary XOR-Convolution)
-    data = json.loads((Path(__file__).parent / "tiles_data.json").read_text())
-    masks = [data["tiles"][str(n)]["mask"] for n in range(1, 121)]
-    print(f"[xor_convolution] Unique 9x9 binary tiles: {len(set(masks))}/120 (0 errors)")
+def decompose_xor_tile(
+    target_mask: int,
+    prime_tiles: Dict[int, int],
+    max_n: int = 120,
+    w: int = 9,
+    h: int = 9,
+) -> Dict[int, int]:
+    """
+    Blindly decompose an unknown 9x9 binary tile using ONLY the prime basis tiles
+    (without a precomputed composite lookup table) over products <= max_n.
+    """
+    if target_mask == 1:
+        return {}
+    primes = sorted(prime_tiles.keys())
 
-    # 2. Painterly modes (Pollock & Kandinsky)
+    def search(idx: int, cur_n: int, cur_mask: int, cur_facs: Dict[int, int]) -> Dict[int, int] | None:
+        if cur_mask == target_mask and cur_n > 1:
+            return dict(cur_facs)
+        for i in range(idx, len(primes)):
+            p = primes[i]
+            if cur_n * p > max_n:
+                break
+            next_mask = convolve_xor(cur_mask, prime_tiles[p], w, h)
+            cur_facs[p] = cur_facs.get(p, 0) + 1
+            res = search(i, cur_n * p, next_mask, cur_facs)
+            if res is not None:
+                return res
+            if cur_facs[p] == 1:
+                del cur_facs[p]
+            else:
+                cur_facs[p] -= 1
+        return None
+
+    found = search(0, 1, 1, {})
+    if found is None:
+        raise ValueError("Could not decompose XOR tile within max_n")
+    return found
+
+
+if __name__ == "__main__":
+    # 1. Mode 1 (Binary XOR-Convolution): uniqueness + blind basis-search decomposition
+    data = json.loads((Path(__file__).parent / "tiles_data.json").read_text())
+    prime_tiles = {int(p): int(m) for p, m in data["primes"].items()}
+    masks = [int(data["tiles"][str(n)]["mask"]) for n in range(1, 121)]
+    print(f"[xor_convolution] Unique 9x9 binary tiles: {len(set(masks))}/120")
+    xor_errors = 0
+    for n in range(1, 121):
+        rec = decompose_xor_tile(masks[n - 1], prime_tiles, max_n=120)
+        if rec != factorize(n):
+            xor_errors += 1
+    print(f"[xor_convolution] Blind basis-search decomposition: {120 - xor_errors}/120 exact ({xor_errors} errors)")
+
+    # 2. Painterly modes (Pollock, Klee, Kandinsky)
     test_uniqueness_and_peeling("pollock", 120, 100)
+    test_pollock_glaze_homomorphism(120, 100)
+    test_pollock_trajectory_homomorphism(120, 100)
+    test_klee_uniqueness_and_peeling(120, 100)
     test_uniqueness_and_peeling("kandinsky", 120, 100)

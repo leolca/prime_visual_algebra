@@ -280,6 +280,8 @@
       <select id="pollockMultMode">
         <option value="extent" selected>Path extent (steps × e)</option>
         <option value="separate">Separate strokes (e paths)</option>
+        <option value="glaze">Translucent Multiply (Pixel Homomorphism)</option>
+        <option value="trajectory">Trajectory Vector Sum (Path Homomorphism)</option>
       </select>
     </div>
     <label class="checkbox-row">
@@ -1590,8 +1592,81 @@ function generatePollockPrimitives(p, occurrence, sizePx, steps, isDarkBg) {
   return { color, curves, dots };
 }
 
-function drawPollockFactor(ctx, p, occurrence, sizePx, steps, isDarkBg) {
-  const { color, curves, dots } = generatePollockPrimitives(p, occurrence, sizePx, steps, isDarkBg);
+function getPrimeFourierModes(p) {
+  const seed = (p * 2654435761) ^ 0x7f4a7c15;
+  const rand = mulberry32(seed);
+  const modes = [];
+  for (let m = 1; m <= 6; m++) {
+    const amp = 0.13 / Math.sqrt(m);
+    modes.push({
+      fx: 1 + Math.floor(rand() * 7),
+      fy: 1 + Math.floor(rand() * 7),
+      px: rand() * Math.PI * 2,
+      py: rand() * Math.PI * 2,
+      ax: amp * (0.6 + 0.8 * rand()),
+      ay: amp * (0.6 + 0.8 * rand()),
+    });
+  }
+  return modes;
+}
+
+function generateTrajectoryPrimitives(facs, sizePx, steps, isDarkBg) {
+  const primes = Object.keys(facs).map(Number).sort((a, b) => a - b);
+  if (primes.length === 0) return { color: isDarkBg ? "#ddd" : "#222", curves: [], dots: [] };
+
+  // Circular mean of prime hues weighted by exponent e
+  let sx = 0, sy = 0;
+  for (const p of primes) {
+    const idx = PRIME_INDEX.get(p) ?? p;
+    const hueRad = (((idx * 137.508 + 18) % 360) * Math.PI) / 180;
+    sx += facs[p] * Math.cos(hueRad);
+    sy += facs[p] * Math.sin(hueRad);
+  }
+  const meanHue = ((Math.atan2(sy, sx) * 180) / Math.PI + 360) % 360;
+  const color = `hsl(${meanHue.toFixed(1)}, 74%, ${isDarkBg ? 60 : 40}%)`;
+
+  const primeModes = primes.map(p => ({ e: facs[p], modes: getPrimeFourierModes(p) }));
+  const numPts = Math.max(60, steps * 2);
+  const margin = sizePx * 0.06;
+  const span = sizePx - 2 * margin;
+  const pts = [];
+
+  for (let i = 0; i <= numPts; i++) {
+    const t = i / numPts;
+    let dx = 0, dy = 0;
+    for (const { e, modes } of primeModes) {
+      for (const m of modes) {
+        dx += e * m.ax * Math.cos(2 * Math.PI * m.fx * t + m.px);
+        dy += e * m.ay * Math.sin(2 * Math.PI * m.fy * t + m.py);
+      }
+    }
+    // Toroidal wrap on [0, 1)^2 preserves the exact additive homomorphism gamma_{a*b} = gamma_a + gamma_b (mod 1)
+    const wx = (((0.5 + dx) % 1) + 1) % 1;
+    const wy = (((0.5 + dy) % 1) + 1) % 1;
+    pts.push([margin + wx * span, margin + wy * span]);
+  }
+
+  const curves = [];
+  const dots = [];
+  const rand = mulberry32(1234567);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x, y] = pts[i];
+    const [nx, ny] = pts[i + 1];
+    const dist = Math.hypot(nx - x, ny - y);
+    // Skip drawing across toroidal wrap jumps
+    if (dist > span * 0.45) continue;
+    const normSpeed = Math.min(1, dist / (sizePx * 0.10));
+    const lw = Math.max(0.7, (1.15 - normSpeed) * (sizePx * 0.036));
+    const mx = (x + nx) / 2, my = (y + ny) / 2;
+    curves.push({ x, y, cx: mx, cy: my, nx, ny, lw, alpha: 0.88 });
+    if (rand() < 0.22) {
+      dots.push({ x: nx, y: ny, r: lw * 0.75, alpha: 0.80 });
+    }
+  }
+  return { color, curves, dots };
+}
+
+function drawPollockPrimitives(ctx, color, curves, dots, alphaScale = 1.0) {
   ctx.save();
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -1600,19 +1675,24 @@ function drawPollockFactor(ctx, p, occurrence, sizePx, steps, isDarkBg) {
 
   for (const c of curves) {
     ctx.lineWidth = c.lw;
-    ctx.globalAlpha = c.alpha;
+    ctx.globalAlpha = c.alpha * alphaScale;
     ctx.beginPath();
     ctx.moveTo(c.x, c.y);
     ctx.quadraticCurveTo(c.cx, c.cy, c.nx, c.ny);
     ctx.stroke();
   }
   for (const d of dots) {
-    ctx.globalAlpha = d.alpha;
+    ctx.globalAlpha = d.alpha * alphaScale;
     ctx.beginPath();
     ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
+}
+
+function drawPollockFactor(ctx, p, occurrence, sizePx, steps, isDarkBg) {
+  const { color, curves, dots } = generatePollockPrimitives(p, occurrence, sizePx, steps, isDarkBg);
+  drawPollockPrimitives(ctx, color, curves, dots, 1.0);
 }
 
 function renderPollockSVG(n, sizePx) {
@@ -1636,33 +1716,52 @@ function renderPollockSVG(n, sizePx) {
 
   const facs = DATA.tiles[String(n)] ? DATA.tiles[String(n)].factors : factorizeJS(n);
   const primes = Object.keys(facs).map(Number).sort((a, b) => a - b);
+
+  const appendPrimitives = (color, curves, dots, alphaScale, blendMode) => {
+    for (const c of curves) {
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("d", `M ${c.x.toFixed(2)} ${c.y.toFixed(2)} Q ${c.cx.toFixed(2)} ${c.cy.toFixed(2)} ${c.nx.toFixed(2)} ${c.ny.toFixed(2)}`);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", color);
+      path.setAttribute("stroke-width", c.lw.toFixed(2));
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-opacity", (c.alpha * alphaScale).toFixed(3));
+      if (blendMode) path.setAttribute("style", `mix-blend-mode: ${blendMode};`);
+      svg.appendChild(path);
+    }
+    for (const d of dots) {
+      const circle = document.createElementNS(ns, "circle");
+      circle.setAttribute("cx", d.x.toFixed(2));
+      circle.setAttribute("cy", d.y.toFixed(2));
+      circle.setAttribute("r", d.r.toFixed(2));
+      circle.setAttribute("fill", color);
+      circle.setAttribute("fill-opacity", (d.alpha * alphaScale).toFixed(3));
+      if (blendMode) circle.setAttribute("style", `mix-blend-mode: ${blendMode};`);
+      svg.appendChild(circle);
+    }
+  };
+
+  if (multMode === "trajectory") {
+    const { color, curves, dots } = generateTrajectoryPrimitives(facs, sizePx, steps, isDarkBg);
+    appendPrimitives(color, curves, dots, 1.0, null);
+    return svg;
+  }
+
   for (const p of primes) {
     const exp = facs[p];
+    if (multMode === "glaze") {
+      const { color, curves, dots } = generatePollockPrimitives(p, 1, sizePx, steps, isDarkBg);
+      const blend = isDarkBg ? "screen" : "multiply";
+      for (let k = 1; k <= exp; k++) appendPrimitives(color, curves, dots, 0.45, blend);
+      continue;
+    }
     const layers = multMode === "extent"
       ? [{ k: 1, nSteps: steps * exp }]
       : Array.from({ length: exp }, (_, i) => ({ k: i + 1, nSteps: steps }));
 
     for (const { k, nSteps } of layers) {
       const { color, curves, dots } = generatePollockPrimitives(p, k, sizePx, nSteps, isDarkBg);
-      for (const c of curves) {
-        const path = document.createElementNS(ns, "path");
-        path.setAttribute("d", `M ${c.x.toFixed(2)} ${c.y.toFixed(2)} Q ${c.cx.toFixed(2)} ${c.cy.toFixed(2)} ${c.nx.toFixed(2)} ${c.ny.toFixed(2)}`);
-        path.setAttribute("fill", "none");
-        path.setAttribute("stroke", color);
-        path.setAttribute("stroke-width", c.lw.toFixed(2));
-        path.setAttribute("stroke-linecap", "round");
-        path.setAttribute("stroke-opacity", c.alpha);
-        svg.appendChild(path);
-      }
-      for (const d of dots) {
-        const circle = document.createElementNS(ns, "circle");
-        circle.setAttribute("cx", d.x.toFixed(2));
-        circle.setAttribute("cy", d.y.toFixed(2));
-        circle.setAttribute("r", d.r.toFixed(2));
-        circle.setAttribute("fill", color);
-        circle.setAttribute("fill-opacity", d.alpha);
-        svg.appendChild(circle);
-      }
+      appendPrimitives(color, curves, dots, 1.0, null);
     }
   }
   return svg;
@@ -2220,6 +2319,27 @@ function renderPollockCanvas(n, sizePx) {
 
   const facs = DATA.tiles[String(n)] ? DATA.tiles[String(n)].factors : factorizeJS(n);
   const primes = Object.keys(facs).map(Number).sort((a, b) => a - b);
+
+  if (multMode === "trajectory") {
+    const { color, curves, dots } = generateTrajectoryPrimitives(facs, sizePx, steps, isDarkBg);
+    drawPollockPrimitives(ctx, color, curves, dots, 1.0);
+    return canvas;
+  }
+
+  if (multMode === "glaze") {
+    ctx.save();
+    ctx.globalCompositeOperation = isDarkBg ? "screen" : "multiply";
+    for (const p of primes) {
+      const exp = facs[p];
+      const { color, curves, dots } = generatePollockPrimitives(p, 1, sizePx, steps, isDarkBg);
+      for (let k = 1; k <= exp; k++) {
+        drawPollockPrimitives(ctx, color, curves, dots, 0.45);
+      }
+    }
+    ctx.restore();
+    return canvas;
+  }
+
   for (const p of primes) {
     const exp = facs[p];
     if (multMode === "extent") {

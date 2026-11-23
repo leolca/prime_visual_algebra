@@ -816,8 +816,45 @@ def decompose_xor_tile(
     return found
 
 
+def decompose_or_grammar_tile(
+    target_mask: int,
+    or_pp_tiles: Dict[str, int],
+    max_n: int = 120,
+) -> Dict[int, int]:
+    """
+    Blindly decompose an unknown 9x9 OR-grammar tile using ONLY the prime-power
+    basis motifs {G_{p,e}} over products <= max_n.
+    """
+    if target_mask == 0:
+        return {}
+    primes = sorted({int(k.split("^")[0]) for k in or_pp_tiles.keys()})
+
+    def search(idx: int, cur_n: int, cur_mask: int, cur_facs: Dict[int, int]) -> Dict[int, int] | None:
+        if cur_mask == target_mask and cur_n > 1:
+            return dict(cur_facs)
+        for i in range(idx, len(primes)):
+            p = primes[i]
+            e = 1
+            while cur_n * (p ** e) <= max_n:
+                pp_mask = or_pp_tiles[f"{p}^{e}"]
+                # Pruning: in OR-grammar, every bit of pp_mask must be present in target_mask
+                if (pp_mask & target_mask) == pp_mask:
+                    cur_facs[p] = e
+                    res = search(i + 1, cur_n * (p ** e), cur_mask | pp_mask, cur_facs)
+                    if res is not None:
+                        return res
+                    del cur_facs[p]
+                e += 1
+        return None
+
+    found = search(0, 1, 0, {})
+    if found is None:
+        raise ValueError("Could not decompose OR-grammar tile within max_n")
+    return found
+
+
 if __name__ == "__main__":
-    # 1. Mode 1 (Binary XOR-Convolution): uniqueness + blind basis-search decomposition
+    # 1a. Mode 1a (Binary XOR-Convolution): uniqueness + blind basis-search decomposition
     data = json.loads((Path(__file__).parent / "tiles_data.json").read_text())
     prime_tiles = {int(p): int(m) for p, m in data["primes"].items()}
     masks = [int(data["tiles"][str(n)]["mask"]) for n in range(1, 121)]
@@ -828,6 +865,17 @@ if __name__ == "__main__":
         if rec != factorize(n):
             xor_errors += 1
     print(f"[xor_convolution] Blind basis-search decomposition: {120 - xor_errors}/120 exact ({xor_errors} errors)")
+
+    # 1b. Mode 1b (Binary OR-Grammar): uniqueness + blind subset-pruned decomposition
+    or_pp_tiles = {k: int(v) for k, v in data["or_pp_tiles"].items()}
+    or_masks = [int(data["tiles"][str(n)]["or_mask"]) for n in range(1, 121)]
+    print(f"[or_grammar] Unique 9x9 binary tiles: {len(set(or_masks))}/120")
+    or_errors = 0
+    for n in range(1, 121):
+        rec = decompose_or_grammar_tile(or_masks[n - 1], or_pp_tiles, max_n=120)
+        if rec != factorize(n):
+            or_errors += 1
+    print(f"[or_grammar] Blind subset-pruned decomposition: {120 - or_errors}/120 exact ({or_errors} errors)")
 
     # 2. Painterly modes (Pollock, Klee, Kandinsky)
     test_uniqueness_and_peeling("pollock", 120, 100)

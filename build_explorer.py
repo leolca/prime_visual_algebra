@@ -239,6 +239,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
   <div class="controls" id="xorControls">
     <div class="control-group">
+      <label for="binaryLaw">Composition Law</label>
+      <select id="binaryLaw">
+        <option value="xor_homomorphism" selected>2D XOR-Convolution (Homomorphism)</option>
+        <option value="or_grammar">Bitwise OR Motifs (Generative Grammar)</option>
+      </select>
+    </div>
+    <div class="control-group">
       <label for="styleSelect">Presentation Style</label>
       <select id="styleSelect">
         <option value="organic">Organic Ink (Connected)</option>
@@ -1500,6 +1507,25 @@ function renderLab() {
 
   const style = document.getElementById("styleSelect").value;
   const palette = PALETTES[document.getElementById("paletteSelect").value];
+  const law = document.getElementById("binaryLaw").value;
+
+  if (law === "or_grammar") {
+    const maskA = BigInt(DATA.tiles[String(a)].or_mask);
+    const maskB = BigInt(DATA.tiles[String(b)].or_mask);
+    const facsProd = factorizeJS(prod);
+    let maskC = 0n;
+    for (const [p, e] of Object.entries(facsProd)) {
+      const key = `${p}^${e}`;
+      if (DATA.or_pp_tiles[key]) maskC |= BigInt(DATA.or_pp_tiles[key]);
+    }
+    svgA.appendChild(renderTileSVG(maskA, 86, style, palette));
+    svgB.appendChild(renderTileSVG(maskB, 86, style, palette));
+    svgC.appendChild(renderTileSVG(maskC, 86, style, palette));
+    document.getElementById("capC").textContent = `a × b = ${prod} (OR grammar)`;
+    updateInspector(prod, maskC);
+    return;
+  }
+
   const maskA = BigInt(DATA.tiles[String(a)].mask);
   const maskB = BigInt(DATA.tiles[String(b)].mask);
   const maskC = convolveXor(maskA, maskB);
@@ -1526,7 +1552,9 @@ function renderVisualForN(n, sizePx) {
   if (activeMode === "kandinsky") return renderKandinskyCanvas(n, sizePx);
   const style = document.getElementById("styleSelect").value;
   const palette = PALETTES[document.getElementById("paletteSelect").value];
-  const mask = BigInt(DATA.tiles[String(n)].mask);
+  const law = document.getElementById("binaryLaw").value;
+  const entry = DATA.tiles[String(n)];
+  const mask = BigInt(law === "or_grammar" ? entry.or_mask : entry.mask);
   return renderTileSVG(mask, sizePx, style, palette);
 }
 
@@ -1590,10 +1618,11 @@ function renderGrid() {
     ? document.getElementById("showRolesKandinsky").checked
     : document.getElementById("showRoles").checked;
 
+  const law = document.getElementById("binaryLaw").value;
   grid.innerHTML = "";
   for (let n = 1; n <= maxN; n++) {
     const entry = DATA.tiles[String(n)];
-    const mask = BigInt(entry.mask);
+    const mask = BigInt(law === "or_grammar" ? entry.or_mask : entry.mask);
     const facs = entry.factors;
     const keys = Object.keys(facs);
     const isPrime = keys.length === 1 && facs[keys[0]] === 1;
@@ -1650,7 +1679,7 @@ function renderGrid() {
   }
 }
 
-["styleSelect", "paletteSelect", "showRoles", "pollockBg", "pollockDensity", "pollockMultMode", "showRolesPollock", "kleePaper", "kleeExtent", "kleeSpacing", "showRolesKlee", "kandinskyGround", "kandinskyMult", "showRolesKandinsky"].forEach(id => {
+["binaryLaw", "styleSelect", "paletteSelect", "showRoles", "pollockBg", "pollockDensity", "pollockMultMode", "showRolesPollock", "kleePaper", "kleeExtent", "kleeSpacing", "showRolesKlee", "kandinskyGround", "kandinskyMult", "showRolesKandinsky"].forEach(id => {
   document.getElementById(id).addEventListener("change", () => { renderLab(); renderFactorizationPanel(selectedN); renderGrid(); });
 });
 ["inputA", "inputB"].forEach(id => {

@@ -98,8 +98,10 @@ To avoid evaluating to zero at $(x,y) = (1,1)$ (which occurs whenever a tile has
   \label{fig:xor_grid}
 \end{figure}
 
-\subsection{Lossless Presentation Decoupling}
+\subsection{Lossless Presentation Decoupling and Binary Generative Grammar}
 While raw black-and-white pixels make the algebra explicit, any bijective rendering of the $0/1$ grid preserves exact recoverability. Figure~\ref{fig:xor_presentations} illustrates four lossless renderings of $\Phi(30) = \Phi(6) \star \Phi(5)$: raw binary, connected organic ink (fusing orthogonally adjacent `1` cells), rotated diamonds, and a radial mandala mapping $(r,c)$ to concentric rings and angular sectors. Sampling cell centers (or thresholding the two-tone palette) recovers the exact underlying matrix in $R_{9,9}$.
+
+For direct comparison with the painterly systems below, we also construct a \emph{bitwise OR generative grammar} over $9 \times 9$ binary tiles: each prime $p$ receives a 3-bit base motif $G_{p,1}$, each higher exponent $e \ge 2$ adds 2 deterministic bits ($G_{p,1} \subset G_{p,2} \subset \dots$), and composites take the bitwise union $\bigvee_i G_{p_i, e_i}$. Unlike XOR-convolution, this preserves every prime's visible motif intact inside composites (like radicals in kanji), while remaining $120/120$ unique and blindly recoverable via subset-pruned search.
 
 \begin{figure}[t]
   \centering
@@ -205,7 +207,8 @@ Table~\ref{tab:verification} summarizes our empirical verification across all $n
     \toprule
     Visual System & Unique Images & Exact Recovery & Hom.\ Errors \\
     \midrule
-    1. Binary XOR-Convolution ($9 \times 9$) & $120 / 120$ & $120 / 120$ & $0$ \\
+    1a. Binary XOR-Convolution ($9 \times 9$) & $120 / 120$ & $120 / 120$ & $0$ \\
+    1b. Binary OR-Grammar ($9 \times 9$) & $120 / 120$ & $120 / 120$ & --- \\
     2a. Pollock Drip-Paths (opaque, $100^2$) & $120 / 120$ & $120 / 120$ & --- \\
     2b. Pollock Translucent Multiply ($100^2$) & $120 / 120$ & $120 / 120$ & $0$ (pixel) \\
     2c. Pollock Trajectory Vector Sum ($100^2$) & $120 / 120$ & --- & $0$ (vector) \\

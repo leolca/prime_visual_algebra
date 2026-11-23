@@ -161,6 +161,77 @@ def generate_prime_basis(
     return prime_tiles, all_tiles
 
 
+def generate_or_grammar_basis(
+    max_n: int,
+    w: int = 9,
+    h: int = 9,
+    seed: int = 2026,
+) -> Tuple[Dict[str, int], Dict[int, int]]:
+    """
+    Generate nested prime-power binary motifs G_{p, e} (with G_{p,1} subset G_{p,2} ...)
+    combined via bitwise OR (Generative Grammar) such that all n in 1..max_n are unique.
+    Returns (pp_tiles {"p^e": mask}, all_tiles {n: mask}).
+    """
+    import math
+    rng = random.Random(seed + 99)
+    primes = primes_up_to(max_n)
+    all_coords = list(range(w * h))
+
+    pp_tiles: Dict[str, int] = {}
+    all_tiles: Dict[int, int] = {1: 0}
+    seen_masks = {0: 1}
+
+    by_largest_prime: Dict[int, List[int]] = {p: [] for p in primes}
+    for n in range(2, max_n + 1):
+        lp = max(factorize(n).keys())
+        by_largest_prime[lp].append(n)
+
+    for p in primes:
+        max_exp = int(math.floor(math.log(max_n, p)))
+        found = False
+        for _ in range(500):
+            cand_pp: Dict[int, int] = {}
+            cur = 0
+            used_bits = set()
+            # Base 3 bits for e=1, +2 bits per additional exponent
+            for e in range(1, max_exp + 1):
+                k = 3 if e == 1 else 2
+                avail = [b for b in all_coords if b not in used_bits]
+                chosen = rng.sample(avail, k)
+                for b in chosen:
+                    used_bits.add(b)
+                    cur |= (1 << b)
+                cand_pp[e] = cur
+
+            temp_new: Dict[int, int] = {}
+            temp_seen = set(seen_masks.keys())
+            collision = False
+            for n in sorted(by_largest_prime[p]):
+                facs = factorize(n)
+                mask = cand_pp[facs[p]]
+                for q, eq in facs.items():
+                    if q != p:
+                        mask |= pp_tiles[f"{q}^{eq}"]
+                if mask in temp_seen:
+                    collision = True
+                    break
+                temp_new[n] = mask
+                temp_seen.add(mask)
+
+            if not collision:
+                for e, m in cand_pp.items():
+                    pp_tiles[f"{p}^{e}"] = m
+                for n, m in temp_new.items():
+                    all_tiles[n] = m
+                    seen_masks[m] = n
+                found = True
+                break
+        if not found:
+            raise RuntimeError(f"Could not find OR-grammar basis for prime {p}")
+
+    return pp_tiles, all_tiles
+
+
 def verify_homomorphism(all_tiles: Dict[int, int], max_n: int, w: int, h: int) -> None:
     """Verify Phi(a * b) == convolve_xor(Phi(a), Phi(b)) for all a * b <= max_n, and uniqueness."""
     assert len(set(all_tiles.values())) == max_n, "Collision detected!"
@@ -186,8 +257,11 @@ if __name__ == "__main__":
     prime_tiles, all_tiles = generate_prime_basis(MAX_N, W, H, seed=args.seed)
     verify_homomorphism(all_tiles, MAX_N, W, H)
 
+    or_pp_tiles, or_all_tiles = generate_or_grammar_basis(MAX_N, W, H, seed=args.seed)
+    assert len(set(or_all_tiles.values())) == MAX_N, "OR-grammar collision detected!"
+
     densities = [bin(all_tiles[n]).count("1") / (W * H) for n in range(1, MAX_N + 1)]
-    print(f"Success! {MAX_N} unique {W}x{H} tiles generated.")
+    print(f"Success! {MAX_N} unique {W}x{H} tiles generated (XOR-homomorphism & OR-grammar).")
     print(f"Homomorphism Phi(a*b) = Phi(a) * Phi(b) verified for all a*b <= {MAX_N}.")
     print(f"Density range: min={min(densities):.1%}, median={sorted(densities)[len(densities)//2]:.1%}, max={max(densities):.1%}")
 
@@ -197,9 +271,11 @@ if __name__ == "__main__":
         "height": H,
         "max_n": MAX_N,
         "primes": {str(p): mask for p, mask in prime_tiles.items()},
+        "or_pp_tiles": {k: str(v) for k, v in or_pp_tiles.items()},
         "tiles": {
             str(n): {
                 "mask": str(all_tiles[n]),  # string to avoid JS 53-bit int precision loss!
+                "or_mask": str(or_all_tiles[n]),
                 "factors": factorize(n),
                 "popcount": bin(all_tiles[n]).count("1"),
             }

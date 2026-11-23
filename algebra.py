@@ -186,22 +186,45 @@ def generate_or_grammar_basis(
         lp = max(factorize(n).keys())
         by_largest_prime[lp].append(n)
 
+    # Connected block/polyomino stamps (2x2, 3x1, 1x3, L-trominoes, L/T-tetrominoes)
+    stamps_e1 = [
+        [(0, 0), (0, 1), (1, 0), (1, 1)],          # 2x2 block
+        [(0, 0), (0, 1), (0, 2)],                  # 1x3 bar
+        [(0, 0), (1, 0), (2, 0)],                  # 3x1 bar
+        [(0, 0), (1, 0), (1, 1)],                  # L-tromino
+        [(0, 0), (0, 1), (1, 1)],                  # L-tromino rot
+        [(0, 0), (0, 1), (0, 2), (1, 1)],          # T-tetromino
+        [(0, 0), (1, 0), (2, 0), (2, 1)],          # L-tetromino
+    ]
+    stamps_ext = [
+        [(0, 0), (0, 1)],                          # 1x2 domino
+        [(0, 0), (1, 0)],                          # 2x1 domino
+        [(0, 0), (0, 1), (1, 0)],                  # corner 3-block
+    ]
+
     for p in primes:
         max_exp = int(math.floor(math.log(max_n, p)))
         found = False
-        for _ in range(500):
+        for _ in range(800):
             cand_pp: Dict[int, int] = {}
             cur = 0
             used_bits = set()
-            # Base 3 bits for e=1, +2 bits per additional exponent
             for e in range(1, max_exp + 1):
-                k = 3 if e == 1 else 2
-                avail = [b for b in all_coords if b not in used_bits]
-                chosen = rng.sample(avail, k)
-                for b in chosen:
+                shape = rng.choice(stamps_e1 if e == 1 else stamps_ext)
+                r0 = rng.randrange(0, h - max(dr for dr, _ in shape))
+                c0 = rng.randrange(0, w - max(dc for _, dc in shape))
+                bits = [(r0 + dr) * w + (c0 + dc) for dr, dc in shape]
+                # Ensure this exponent step actually adds at least 2 new bits
+                new_bits = [b for b in bits if b not in used_bits]
+                if len(new_bits) < 2:
+                    break
+                for b in bits:
                     used_bits.add(b)
                     cur |= (1 << b)
                 cand_pp[e] = cur
+
+            if len(cand_pp) < max_exp:
+                continue
 
             temp_new: Dict[int, int] = {}
             temp_seen = set(seen_masks.keys())

@@ -296,9 +296,9 @@ def fig4_peeling_decomposition() -> None:
     plt.close(fig)
 
 
-def fig5_message_leonardo() -> None:
+def fig5_message_matharts() -> None:
     w, h, tiles = load_tiles()
-    word = "Leonardo"
+    word = "MathArts"
     chars = list(word)
     codes = [ord(ch) for ch in chars]
 
@@ -336,7 +336,7 @@ def fig5_message_leonardo() -> None:
                 ax.set_ylabel(label, fontsize=8.5, fontweight="bold", rotation=0, labelpad=44, va="center")
 
     plt.tight_layout(h_pad=0.6, w_pad=0.4)
-    fig.savefig(FIG_DIR / "fig5_message_leonardo.pdf", bbox_inches="tight", dpi=300)
+    fig.savefig(FIG_DIR / "fig5_message_matharts.pdf", bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 
@@ -345,5 +345,5 @@ if __name__ == "__main__":
     fig2_xor_presentations()
     fig3_painterly_gallery()
     fig4_peeling_decomposition()
-    fig5_message_leonardo()
+    fig5_message_matharts()
     print("Generated all figures in", FIG_DIR)

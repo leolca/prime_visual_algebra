@@ -413,7 +413,7 @@ def run_monte_carlo(n_bits: int = 128, n_trials: int = 100, size: int = 512, alp
 
 
 if __name__ == "__main__":
-    msg = "Leonardo"
+    msg = "MathArts"
     canvas_img, true_bits = encode_message_pollock(msg, size=512, alpha=0.50)
     print(f"Encoded '{msg}' ({len(true_bits)} bits, primes 2..{get_first_k_primes(len(true_bits))[-1]}) on 1 canvas (512x512, organic top-skein).")
 

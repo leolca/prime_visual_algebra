@@ -29,9 +29,29 @@ def get_first_k_primes(k: int) -> List[int]:
         n *= 2
 
 
-def prime_color_pollock(idx: int) -> Tuple[int, int, int]:
-    # Keep hue away from 340..20 deg (reserved for the foundational Venetian umber-crimson pour)
-    hue = 28.0 + ((idx * 137.508) % 302.0)
+def rgb_to_hue_deg(rgb: Tuple[int, int, int]) -> float:
+    r, g, b = rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0
+    mx, mn = max(r, g, b), min(r, g, b)
+    df = mx - mn
+    if df < 1e-6:
+        return 0.0
+    if mx == r:
+        h = (60.0 * ((g - b) / df) + 360.0) % 360.0
+    elif mx == g:
+        h = (60.0 * ((b - r) / df) + 120.0) % 360.0
+    else:
+        h = (60.0 * ((r - g) / df) + 240.0) % 360.0
+    return h
+
+
+def prime_color_pollock(idx: int, skein_color: str = BASE_POUR_HEX) -> Tuple[int, int, int]:
+    # Keep hue away from a 58-deg guard band centered on the top-skein hue (default 359 deg -> [28, 330])
+    if skein_color.lower() == BASE_POUR_HEX:
+        hue_start, hue_span = 28.0, 302.0
+    else:
+        sk_hue = rgb_to_hue_deg(hex_to_rgb(skein_color))
+        hue_start, hue_span = (sk_hue + 29.0) % 360.0, 302.0
+    hue = (hue_start + ((idx * 137.508) % hue_span)) % 360.0
     sat = 66.0 + ((idx * 13) % 18)
     light = 43.0
     return hsl_to_rgb(hue, sat, light)
@@ -74,43 +94,58 @@ def render_stroke_mask(seed: int, size: int = 512, steps: int = 28, margin_frac:
     return np.array(img) > 0
 
 
-def render_prime_stroke_mask(p: int, idx: int, size: int = 512, steps: int = 28) -> Tuple[np.ndarray, np.ndarray]:
+def render_prime_stroke_mask(
+    p: int, idx: int, size: int = 512, steps: int = 28, skein_color: str = BASE_POUR_HEX
+) -> Tuple[np.ndarray, np.ndarray]:
     seed = ((p * 2654435761) ^ 0x40503311) & 0xFFFFFFFF
     mask = render_stroke_mask(seed, size=size, steps=steps, margin_frac=0.10, lw_scale=0.022)
-    rgb = np.array(prime_color_pollock(idx), dtype=np.uint8)
+    rgb = np.array(prime_color_pollock(idx, skein_color=skein_color), dtype=np.uint8)
     return rgb, mask
 
 
-def render_base_pour_mask(size: int = 512) -> np.ndarray:
+def render_base_pour_mask(size: int = 512, skein_seed: int = 0x20261124) -> np.ndarray:
     """Organic foundational Pollock pour used for both aesthetics and RTS registration."""
-    return render_stroke_mask(seed=0x20261124, size=size, steps=26, margin_frac=0.12, lw_scale=0.028)
+    return render_stroke_mask(seed=skein_seed & 0xFFFFFFFF, size=size, steps=26, margin_frac=0.12, lw_scale=0.028)
 
 
-def encode_bits_pollock(bits: List[int], size: int = 512, alpha: float = 0.50) -> Image.Image:
+def encode_bits_pollock(
+    bits: List[int],
+    size: int = 512,
+    alpha: float = 0.50,
+    skein_seed: int = 0x20261124,
+    skein_color: str = BASE_POUR_HEX,
+) -> Image.Image:
     """Encode an arbitrary bit list onto a single Pollock canvas with an opaque organic top-skein."""
     primes = get_first_k_primes(len(bits))
     canvas = np.broadcast_to(BG_RGB, (size, size, 3)).copy()
 
     for idx, (bit, p) in enumerate(zip(bits, primes)):
         if bit == 1:
-            rgb, mask = render_prime_stroke_mask(p, idx, size=size)
+            rgb, mask = render_prime_stroke_mask(p, idx, size=size, skein_color=skein_color)
             col = rgb.astype(np.float32) / 255.0
             canvas[mask] *= (1.0 - alpha) + alpha * col
 
     # Paint the organic Pollock top-skein (uniform pigment for clean Fourier-Mellin registration)
-    base_mask = render_base_pour_mask(size=size)
-    canvas[base_mask] = BASE_POUR_RGB
+    base_mask = render_base_pour_mask(size=size, skein_seed=skein_seed)
+    skein_rgb = np.array(hex_to_rgb(skein_color), dtype=np.float32)
+    canvas[base_mask] = skein_rgb
     return Image.fromarray(np.clip(np.round(canvas), 0, 255).astype(np.uint8))
 
 
-def encode_message_pollock(message: str, size: int = 512, alpha: float = 0.50) -> Tuple[Image.Image, List[int]]:
+def encode_message_pollock(
+    message: str,
+    size: int = 512,
+    alpha: float = 0.50,
+    skein_seed: int = 0x20261124,
+    skein_color: str = BASE_POUR_HEX,
+) -> Tuple[Image.Image, List[int]]:
     """Encode an ASCII/UTF-8 string onto a single Pollock canvas with an organic top-skein."""
     raw = message.encode("utf-8")
     bits: List[int] = []
     for byte in raw:
         for b in range(7, -1, -1):
             bits.append((byte >> b) & 1)
-    return encode_bits_pollock(bits, size=size, alpha=alpha), bits
+    return encode_bits_pollock(bits, size=size, alpha=alpha, skein_seed=skein_seed, skein_color=skein_color), bits
 
 
 def apply_rts_distortion(
@@ -152,9 +187,10 @@ def apply_rts_distortion(
     return out
 
 
-def extract_base_pour_score(arr: np.ndarray) -> np.ndarray:
-    """Extract soft response map for the opaque Venetian crimson top-skein."""
-    diff = arr.astype(np.float32) - BASE_POUR_RGB
+def extract_base_pour_score(arr: np.ndarray, skein_color: str = BASE_POUR_HEX) -> np.ndarray:
+    """Extract soft response map for the opaque top-skein."""
+    skein_rgb = np.array(hex_to_rgb(skein_color), dtype=np.float32) if skein_color.lower() != BASE_POUR_HEX else BASE_POUR_RGB
+    diff = arr.astype(np.float32) - skein_rgb
     dist = np.sqrt(np.sum(diff ** 2, axis=2))
     return np.exp(-(dist / 30.0) ** 2).astype(np.float32)
 
@@ -286,10 +322,16 @@ def logpolar_fft_register(ref: np.ndarray, mov: np.ndarray) -> Tuple[float, floa
     return best_params
 
 
-def align_image_organic(distorted: Image.Image, target_size: int = 512) -> Image.Image:
+def align_image_organic(
+    distorted: Image.Image,
+    target_size: int = 512,
+    skein_seed: int = 0x20261124,
+    skein_color: str = BASE_POUR_HEX,
+    return_meta: bool = False,
+):
     """Align distorted canvas back to canonical frame using the organic base pour."""
     work_scale = 0.25  # 128x128 for fast Fourier-Mellin registration
-    ref_mask = render_base_pour_mask(size=target_size)
+    ref_mask = render_base_pour_mask(size=target_size, skein_seed=skein_seed)
     ref_small = np.array(
         Image.fromarray((ref_mask * 255).astype(np.uint8)).resize(
             (int(target_size * work_scale), int(target_size * work_scale)),
@@ -301,7 +343,7 @@ def align_image_organic(distorted: Image.Image, target_size: int = 512) -> Image
     mov_w = int(round(distorted.width * work_scale))
     mov_h = int(round(distorted.height * work_scale))
     mov_small_img = distorted.resize((mov_w, mov_h), Image.Resampling.BILINEAR)
-    mov_small = extract_base_pour_score(np.array(mov_small_img))
+    mov_small = extract_base_pour_score(np.array(mov_small_img), skein_color=skein_color)
 
     ang, sc, dx_s, dy_s = logpolar_fft_register(ref_small, mov_small)
     dx = dx_s / work_scale
@@ -320,23 +362,33 @@ def align_image_organic(distorted: Image.Image, target_size: int = 512) -> Image
     f = cy_src - (d * cx_dst + e * cy_dst)
     coarse = distorted.transform((target_size, target_size), Image.Transform.AFFINE, (a, b, c, d, e, f), resample=Image.Resampling.BILINEAR)
 
-    coarse_score = extract_base_pour_score(np.array(coarse))
+    coarse_score = extract_base_pour_score(np.array(coarse), skein_color=skein_color)
     cc_full = np.real(np.fft.ifft2(np.fft.fft2(coarse_score) * np.conj(np.fft.fft2(ref_mask.astype(np.float32)))))
     iy, ix = np.unravel_index(np.argmax(cc_full), cc_full.shape)
     fy = float(iy if iy <= target_size // 2 else iy - target_size)
     fx = float(ix if ix <= target_size // 2 else ix - target_size)
     if abs(fx) <= 24 and abs(fy) <= 24:
         coarse = coarse.transform((target_size, target_size), Image.Transform.AFFINE, (1, 0, fx, 0, 1, fy), resample=Image.Resampling.BILINEAR)
+        dx += fx * sc * cos_a + fy * sc * sin_a
+        dy += -fx * sc * sin_a + fy * sc * cos_a
+    if return_meta:
+        return coarse, (ang, sc, dx, dy)
     return coarse
 
 
-def build_log_decoder(n_bits: int, size: int = 512, alpha: float = 0.50):
+def build_log_decoder(
+    n_bits: int,
+    size: int = 512,
+    alpha: float = 0.50,
+    skein_seed: int = 0x20261124,
+    skein_color: str = BASE_POUR_HEX,
+):
     """Precompute Gram inverse G_inv and per-prime log-attenuation vectors for linear decoding."""
     primes = get_first_k_primes(n_bits)
-    base_mask = render_base_pour_mask(size=size)
+    base_mask = render_base_pour_mask(size=size, skein_seed=skein_seed)
     l_vecs = []
     for idx, p in enumerate(primes):
-        rgb, mask = render_prime_stroke_mask(p, idx, size=size)
+        rgb, mask = render_prime_stroke_mask(p, idx, size=size, skein_color=skein_color)
         col = rgb.astype(np.float32) / 255.0
         att = (1.0 - alpha) + alpha * col
         l_vecs.append((mask & (~base_mask), -np.log(np.clip(att, 1e-4, 1.0))))
@@ -353,21 +405,46 @@ def build_log_decoder(n_bits: int, size: int = 512, alpha: float = 0.50):
     return l_vecs, G_inv
 
 
-def decode_bits_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha: float = 0.50, precomp=None) -> List[int]:
+def decode_bits_pollock(
+    img: Image.Image,
+    n_bits: int,
+    size: int = 512,
+    alpha: float = 0.50,
+    precomp=None,
+    skein_seed: int = 0x20261124,
+    skein_color: str = BASE_POUR_HEX,
+    return_meta: bool = False,
+):
     """Decode n_bits from a distorted Pollock canvas using Fourier-Mellin alignment + log-attenuation solver."""
-    l_vecs, G_inv = precomp if precomp is not None else build_log_decoder(n_bits, size=size, alpha=alpha)
-    aligned = align_image_organic(img, target_size=size)
+    l_vecs, G_inv = precomp if precomp is not None else build_log_decoder(
+        n_bits, size=size, alpha=alpha, skein_seed=skein_seed, skein_color=skein_color
+    )
+    aligned, reg_meta = align_image_organic(
+        img, target_size=size, skein_seed=skein_seed, skein_color=skein_color, return_meta=True
+    )
     arr = np.array(aligned, dtype=np.float32)
     res = np.clip(arr / BG_RGB, 1e-3, 1.0)
     L_obs = -np.log(res)
     y = np.array([float(np.sum(L_obs[mi] @ li)) for mi, li in l_vecs], dtype=np.float64)
     b_hat = G_inv @ y
-    return [1 if v >= 0.5 else 0 for v in b_hat]
+    bits = [1 if v >= 0.5 else 0 for v in b_hat]
+    if return_meta:
+        return bits, reg_meta, b_hat
+    return bits
 
 
-def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha: float = 0.50) -> Tuple[str, List[int]]:
+def decode_message_pollock(
+    img: Image.Image,
+    n_bits: int,
+    size: int = 512,
+    alpha: float = 0.50,
+    skein_seed: int = 0x20261124,
+    skein_color: str = BASE_POUR_HEX,
+) -> Tuple[str, List[int]]:
     """Decode UTF-8 message from a distorted Pollock canvas."""
-    rec_bits = decode_bits_pollock(img, n_bits, size=size, alpha=alpha)
+    rec_bits = decode_bits_pollock(
+        img, n_bits, size=size, alpha=alpha, skein_seed=skein_seed, skein_color=skein_color
+    )
     out_bytes = bytearray()
     for i in range(0, len(rec_bits), 8):
         val = 0

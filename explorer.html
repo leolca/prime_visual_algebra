@@ -321,7 +321,28 @@
     </div>
     <label class="checkbox-row">
       <input id="codecTopSkein" type="checkbox" checked />
-      Include crimson top-skein (T<sub>0</sub>)
+      Include top-skein (T<sub>0</sub>)
+    </label>
+    <div class="control-group" style="min-width:140px;">
+      <label for="codecSkeinSeed">Top-Skein Seed</label>
+      <div style="display:flex; gap:4px;">
+        <input id="codecSkeinSeed" type="text" value="0x20261124" maxlength="16" style="width:105px; padding:5px 8px; border:1px solid var(--border); border-radius:6px; font-family:ui-monospace,monospace; font-size:13px;" />
+        <button class="btn-sm" id="btnCodecRandomSeed" type="button" title="Generate random seed">Rand</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label for="codecSkeinColor">Top-Skein Color</label>
+      <select id="codecSkeinColor">
+        <option value="#8b101c" selected>Venetian Crimson (#8b101c)</option>
+        <option value="#163a70">Ultramarine (#163a70)</option>
+        <option value="#145233">Forest Viridian (#145233)</option>
+        <option value="#5c3317">Burnt Umber (#5c3317)</option>
+        <option value="#5b1b59">Deep Plum (#5b1b59)</option>
+      </select>
+    </div>
+    <label class="checkbox-row">
+      <input id="codecShowSeedLabel" type="checkbox" />
+      Stamp seed text
     </label>
     <button class="btn-sm" id="btnCodecDownload" style="align-self:flex-end; padding:7px 14px;">Download PNG</button>
   </div>
@@ -2894,8 +2915,44 @@ function hslToRgbArr(h, s, l) {
   ];
 }
 
-function primeColorCodec(idx) {
-  const hue = 28.0 + ((idx * 137.508) % 302.0);
+function hexToRgbArr(hex) {
+  const clean = hex.replace("#", "");
+  return [
+    parseInt(clean.slice(0, 2), 16),
+    parseInt(clean.slice(2, 4), 16),
+    parseInt(clean.slice(4, 6), 16),
+  ];
+}
+
+function rgbToHueDeg(rgb) {
+  const r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), df = mx - mn;
+  if (df < 1e-6) return 0;
+  if (mx === r) return ((60 * ((g - b) / df) + 360) % 360);
+  if (mx === g) return ((60 * ((b - r) / df) + 120) % 360);
+  return ((60 * ((r - g) / df) + 240) % 360);
+}
+
+function parseSkeinSeed(str) {
+  const s = (str || "").trim();
+  if (/^0x[0-9a-fA-F]+$/.test(s)) return (parseInt(s, 16) >>> 0);
+  if (/^\d+$/.test(s)) return (parseInt(s, 10) >>> 0);
+  // Hash arbitrary string seed via FNV-1a
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
+}
+
+function primeColorCodec(idx, skeinColorHex = "#8b101c") {
+  let hueStart = 28.0;
+  if (skeinColorHex.toLowerCase() !== "#8b101c") {
+    const skHue = rgbToHueDeg(hexToRgbArr(skeinColorHex));
+    hueStart = (skHue + 29.0) % 360.0;
+  }
+  const hue = (hueStart + ((idx * 137.508) % 302.0)) % 360.0;
   const sat = 66.0 + ((idx * 13) % 18);
   const light = 43.0;
   return hslToRgbArr(hue, sat, light);
@@ -2962,6 +3019,11 @@ function renderCodecArt() {
   const alpha = parseFloat(document.getElementById("codecAlpha").value);
   const size = parseInt(document.getElementById("codecSize").value, 10);
   const useTopSkein = document.getElementById("codecTopSkein").checked;
+  const seedRaw = document.getElementById("codecSkeinSeed").value;
+  const skeinSeed = parseSkeinSeed(seedRaw);
+  const skeinColorHex = document.getElementById("codecSkeinColor").value;
+  const skeinRgb = hexToRgbArr(skeinColorHex);
+  const showSeedLabel = document.getElementById("codecShowSeedLabel").checked;
 
   const bytes = new TextEncoder().encode(text);
   const bits = [];
@@ -2992,7 +3054,7 @@ function renderCodecArt() {
     const p = primes[idx];
     const seed = (Math.imul(p, 2654435761) ^ 0x40503311) >>> 0;
     const maskData = renderCodecStrokeMask(seed, size, 28, 0.10, 0.022);
-    const rgb = primeColorCodec(idx);
+    const rgb = primeColorCodec(idx, skeinColorHex);
     const f0 = (1.0 - alpha) + alpha * (rgb[0] / 255.0);
     const f1 = (1.0 - alpha) + alpha * (rgb[1] / 255.0);
     const f2 = (1.0 - alpha) + alpha * (rgb[2] / 255.0);
@@ -3006,12 +3068,12 @@ function renderCodecArt() {
   }
 
   if (useTopSkein) {
-    const skeinData = renderCodecStrokeMask(0x20261124, size, 26, 0.12, 0.028);
+    const skeinData = renderCodecStrokeMask(skeinSeed, size, 26, 0.12, 0.028);
     for (let i = 0; i < nPix; i++) {
       if (skeinData[i * 4 + 3] > 64) {
-        buf[i * 3] = 139;
-        buf[i * 3 + 1] = 16;
-        buf[i * 3 + 2] = 28;
+        buf[i * 3] = skeinRgb[0];
+        buf[i * 3 + 1] = skeinRgb[1];
+        buf[i * 3 + 2] = skeinRgb[2];
       }
     }
   }
@@ -3024,6 +3086,17 @@ function renderCodecArt() {
     outImg.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(outImg, 0, 0);
+
+  if (useTopSkein && showSeedLabel) {
+    const hexTag = "0x" + skeinSeed.toString(16).padStart(8, "0");
+    ctx.save();
+    ctx.font = `${Math.max(10, Math.round(size * 0.022))}px ui-monospace, Menlo, monospace`;
+    ctx.fillStyle = "rgba(40, 35, 30, 0.55)";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(`T0: ${hexTag}`, size - Math.round(size * 0.025), size - Math.round(size * 0.02));
+    ctx.restore();
+  }
 
   const safeTitle = text.length > 0 ? text : "(empty)";
   document.getElementById("codecTitle").textContent = `Single-Canvas Pollock Codec: "${safeTitle}"`;
@@ -3094,7 +3167,13 @@ document.getElementById("tabKlee").addEventListener("click", () => setMode("klee
 document.getElementById("tabKandinsky").addEventListener("click", () => setMode("kandinsky"));
 document.getElementById("tabCodec").addEventListener("click", () => setMode("codec"));
 document.getElementById("codecText").addEventListener("input", renderCodecArt);
-["codecAlpha", "codecSize", "codecTopSkein"].forEach(id => {
+document.getElementById("codecSkeinSeed").addEventListener("input", renderCodecArt);
+document.getElementById("btnCodecRandomSeed").addEventListener("click", () => {
+  const r = (Math.floor(Math.random() * 0xffffffff) >>> 0).toString(16).padStart(8, "0");
+  document.getElementById("codecSkeinSeed").value = "0x" + r;
+  renderCodecArt();
+});
+["codecAlpha", "codecSize", "codecTopSkein", "codecSkeinColor", "codecShowSeedLabel"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderCodecArt);
 });
 document.getElementById("btnCodecDownload").addEventListener("click", () => {

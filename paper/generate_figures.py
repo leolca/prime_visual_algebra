@@ -302,7 +302,7 @@ def fig5_message_leonardo() -> None:
     chars = list(word)
     codes = [ord(ch) for ch in chars]
 
-    fig, axes = plt.subplots(3, len(chars), figsize=(11.2, 4.5))
+    fig, axes = plt.subplots(4, len(chars), figsize=(11.2, 5.8))
     fig.patch.set_facecolor("white")
 
     # Row 0: Binary XOR-Convolution rendered in Organic Ink (lossless)
@@ -317,9 +317,13 @@ def fig5_message_leonardo() -> None:
         if c == 0:
             ax.set_ylabel("XOR-Conv.\n(Organic Ink)", fontsize=8.5, fontweight="bold", rotation=0, labelpad=44, va="center")
 
-    # Row 1: Klee 1914 Watercolor
-    # Row 2: Kandinsky Comp. VIII
-    for r_idx, (mode, label) in enumerate([("klee", "Klee 1914\nWatercolor"), ("kandinsky", "Kandinsky\nComp. VIII")], start=1):
+    # Rows 1-3: Pollock, Klee 1914 Watercolor, Kandinsky Comp. VIII
+    painterly = [
+        ("pollock", "Pollock\nDrip-Paths"),
+        ("klee", "Klee 1914\nWatercolor"),
+        ("kandinsky", "Kandinsky\nComp. VIII"),
+    ]
+    for r_idx, (mode, label) in enumerate(painterly, start=1):
         for c, n in enumerate(codes):
             ax = axes[r_idx, c]
             img = render_composite(mode, n, size=180)

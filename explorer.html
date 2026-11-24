@@ -227,6 +227,7 @@
     <button class="tab-btn" id="tabPollock">2. Pollock Drip-Path Superposition</button>
     <button class="tab-btn" id="tabKlee">3. Klee 1914 Watercolor</button>
     <button class="tab-btn" id="tabKandinsky">4. Kandinsky Composition VIII</button>
+    <button class="tab-btn" id="tabCodec">5. Text-to-Art Codec</button>
   </div>
 
   <div class="controls" id="xorControls">
@@ -295,6 +296,34 @@
       <input id="showRolesPollock" type="checkbox" checked />
       Highlight primes / prime powers
     </label>
+  </div>
+
+  <div class="controls" id="codecControls" style="display:none;">
+    <div class="control-group" style="min-width:220px;">
+      <label for="codecText">Text to Encode (UTF-8)</label>
+      <input id="codecText" type="text" value="MathArts" maxlength="32" placeholder="Enter text..." style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px;" />
+    </div>
+    <div class="control-group">
+      <label for="codecAlpha">Glaze Opacity (&alpha;)</label>
+      <select id="codecAlpha">
+        <option value="0.35">0.35 (Subtle)</option>
+        <option value="0.50" selected>0.50 (Standard RTS)</option>
+        <option value="0.65">0.65 (Deep)</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label for="codecSize">Canvas Size</label>
+      <select id="codecSize">
+        <option value="384">384 &times; 384</option>
+        <option value="512" selected>512 &times; 512</option>
+        <option value="768">768 &times; 768</option>
+      </select>
+    </div>
+    <label class="checkbox-row">
+      <input id="codecTopSkein" type="checkbox" checked />
+      Include crimson top-skein (T<sub>0</sub>)
+    </label>
+    <button class="btn-sm" id="btnCodecDownload" style="align-self:flex-end; padding:7px 14px;">Download PNG</button>
   </div>
 
   <div class="controls" id="kleeControls" style="display:none;">
@@ -390,6 +419,24 @@
       <div class="decomp-meta" id="decompMeta">2² × 3 × 5</div>
     </div>
     <div class="decomp-row" id="decompRow"></div>
+  </div>
+
+  <div class="decomp-panel" id="codecPanel" style="display:none;">
+    <div class="decomp-header">
+      <div class="decomp-title" id="codecTitle">Single-Canvas Pollock Codec: "MathArts"</div>
+      <div class="decomp-meta" id="codecStats">8 bytes &middot; 64 bits &middot; primes 2..311</div>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:20px; align-items:flex-start; margin-top:12px;">
+      <div>
+        <canvas id="codecCanvas" width="512" height="512" style="width:420px; max-width:100%; height:auto; border-radius:8px; border:1px solid var(--border); box-shadow:0 2px 10px rgba(0,0,0,0.08); display:block;"></canvas>
+      </div>
+      <div style="flex:1; min-width:260px;">
+        <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">
+          Each bit index <em>i</em> with value <code>1</code> glazes a deterministic drip trajectory for prime <em>p<sub>i</sub></em> via Translucent Multiply Glazing (TMG) onto raw linen (<code>#f4efe6</code>). Optional Venetian crimson top-skein <em>T<sub>0</sub></em> (<code>#8b101c</code>) enables Fourier&ndash;Mellin RTS registration without fiducial squares.
+        </div>
+        <div id="codecBreakdown" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.55; background:#f8f9fb; border:1px solid var(--border); border-radius:6px; padding:10px 12px; max-height:340px; overflow:auto;"></div>
+      </div>
+    </div>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -2808,32 +2855,256 @@ function renderGrid() {
   document.getElementById(id).addEventListener("input", renderLab);
 });
 
+function getFirstKPrimes(k) {
+  const primes = [];
+  let n = 2;
+  while (primes.length < k) {
+    let isP = true;
+    for (let d = 2; d * d <= n; d++) {
+      if (n % d === 0) { isP = false; break; }
+    }
+    if (isP) primes.push(n);
+    n++;
+  }
+  return primes;
+}
+
+function hslToRgbArr(h, s, l) {
+  const hNorm = ((h % 360) + 360) % 360 / 360;
+  const sNorm = s / 100;
+  const lNorm = l / 100;
+  if (sNorm === 0) {
+    const v = Math.round(lNorm * 255);
+    return [v, v, v];
+  }
+  const q = lNorm < 0.5 ? lNorm * (1 + sNorm) : lNorm + sNorm - lNorm * sNorm;
+  const p = 2 * lNorm - q;
+  const hue2rgb = t => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [
+    Math.round(hue2rgb(hNorm + 1 / 3) * 255),
+    Math.round(hue2rgb(hNorm) * 255),
+    Math.round(hue2rgb(hNorm - 1 / 3) * 255),
+  ];
+}
+
+function primeColorCodec(idx) {
+  const hue = 28.0 + ((idx * 137.508) % 302.0);
+  const sat = 66.0 + ((idx * 13) % 18);
+  const light = 43.0;
+  return hslToRgbArr(hue, sat, light);
+}
+
+function renderCodecStrokeMask(seed, size, steps, marginFrac, lwScale) {
+  const rand = mulberry32(seed >>> 0);
+  const off = document.createElement("canvas");
+  off.width = size;
+  off.height = size;
+  const ctx = off.getContext("2d");
+  ctx.clearRect(0, 0, size, size);
+  ctx.strokeStyle = "#ffffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const margin = size * marginFrac;
+  const span = size - 2 * margin;
+  let x = margin + rand() * span;
+  let y = margin + rand() * span;
+  let angle = rand() * Math.PI * 2;
+  let speed = size * (0.06 + rand() * 0.11);
+
+  for (let i = 0; i < steps; i++) {
+    angle += (rand() - 0.5) * 1.9;
+    speed = Math.max(size * 0.025, Math.min(size * 0.18, speed * (0.75 + rand() * 0.55)));
+    let nx = x + Math.cos(angle) * speed;
+    let ny = y + Math.sin(angle) * speed;
+    if (nx < margin || nx > size - margin) {
+      angle = Math.PI - angle;
+      nx = Math.max(margin, Math.min(size - margin, nx));
+    }
+    if (ny < margin || ny > size - margin) {
+      angle = -angle;
+      ny = Math.max(margin, Math.min(size - margin, ny));
+    }
+    const cx = (x + nx) / 2 + (rand() - 0.5) * speed * 0.45;
+    const cy = (y + ny) / 2 + (rand() - 0.5) * speed * 0.45;
+    const lw = Math.max(2, Math.round((1.15 - speed / (size * 0.18)) * size * lwScale));
+
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(cx, cy, nx, ny);
+    ctx.stroke();
+
+    if (rand() < 0.35) {
+      const rr = lw * (0.6 + rand() * 0.9);
+      const ox = nx + (rand() - 0.5) * lw * 1.6;
+      const oy = ny + (rand() - 0.5) * lw * 1.6;
+      ctx.beginPath();
+      ctx.arc(ox, oy, rr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    x = nx;
+    y = ny;
+  }
+  return ctx.getImageData(0, 0, size, size).data;
+}
+
+function renderCodecArt() {
+  const text = document.getElementById("codecText").value;
+  const alpha = parseFloat(document.getElementById("codecAlpha").value);
+  const size = parseInt(document.getElementById("codecSize").value, 10);
+  const useTopSkein = document.getElementById("codecTopSkein").checked;
+
+  const bytes = new TextEncoder().encode(text);
+  const bits = [];
+  for (const byte of bytes) {
+    for (let b = 7; b >= 0; b--) {
+      bits.push((byte >> b) & 1);
+    }
+  }
+
+  const primes = getFirstKPrimes(bits.length);
+  const canvas = document.getElementById("codecCanvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  const nPix = size * size;
+  const buf = new Float32Array(nPix * 3);
+  for (let i = 0; i < nPix; i++) {
+    buf[i * 3] = 244;
+    buf[i * 3 + 1] = 239;
+    buf[i * 3 + 2] = 230;
+  }
+
+  let onesCount = 0;
+  for (let idx = 0; idx < bits.length; idx++) {
+    if (bits[idx] !== 1) continue;
+    onesCount++;
+    const p = primes[idx];
+    const seed = (Math.imul(p, 2654435761) ^ 0x40503311) >>> 0;
+    const maskData = renderCodecStrokeMask(seed, size, 28, 0.10, 0.022);
+    const rgb = primeColorCodec(idx);
+    const f0 = (1.0 - alpha) + alpha * (rgb[0] / 255.0);
+    const f1 = (1.0 - alpha) + alpha * (rgb[1] / 255.0);
+    const f2 = (1.0 - alpha) + alpha * (rgb[2] / 255.0);
+    for (let i = 0; i < nPix; i++) {
+      if (maskData[i * 4 + 3] > 64) {
+        buf[i * 3] *= f0;
+        buf[i * 3 + 1] *= f1;
+        buf[i * 3 + 2] *= f2;
+      }
+    }
+  }
+
+  if (useTopSkein) {
+    const skeinData = renderCodecStrokeMask(0x20261124, size, 26, 0.12, 0.028);
+    for (let i = 0; i < nPix; i++) {
+      if (skeinData[i * 4 + 3] > 64) {
+        buf[i * 3] = 139;
+        buf[i * 3 + 1] = 16;
+        buf[i * 3 + 2] = 28;
+      }
+    }
+  }
+
+  const outImg = ctx.createImageData(size, size);
+  for (let i = 0; i < nPix; i++) {
+    outImg.data[i * 4] = Math.max(0, Math.min(255, Math.round(buf[i * 3])));
+    outImg.data[i * 4 + 1] = Math.max(0, Math.min(255, Math.round(buf[i * 3 + 1])));
+    outImg.data[i * 4 + 2] = Math.max(0, Math.min(255, Math.round(buf[i * 3 + 2])));
+    outImg.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(outImg, 0, 0);
+
+  const safeTitle = text.length > 0 ? text : "(empty)";
+  document.getElementById("codecTitle").textContent = `Single-Canvas Pollock Codec: "${safeTitle}"`;
+  const primeSpan = primes.length > 0 ? `2..${primes[primes.length - 1]}` : "none";
+  document.getElementById("codecStats").textContent =
+    `${bytes.length} bytes · ${bits.length} bits (${onesCount} active strokes) · primes ${primeSpan}`;
+
+  const breakdownEl = document.getElementById("codecBreakdown");
+  if (bytes.length === 0) {
+    breakdownEl.innerHTML = "<span style='color:var(--muted);'>Enter text above to encode UTF-8 bits as prime-indexed Pollock glazes.</span>";
+  } else {
+    const lines = [];
+    for (let bi = 0; bi < bytes.length; bi++) {
+      const bVal = bytes[bi];
+      const ch = (bVal >= 32 && bVal <= 126) ? String.fromCharCode(bVal) : `0x${bVal.toString(16).padStart(2, "0")}`;
+      const bStr = bVal.toString(2).padStart(8, "0");
+      const activePs = [];
+      for (let k = 0; k < 8; k++) {
+        if (bStr[k] === "1") activePs.push(primes[bi * 8 + k]);
+      }
+      lines.push(`<div><strong>${ch.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</strong> (${bStr}) &rarr; primes [${activePs.join(", ") || "none"}]</div>`);
+    }
+    breakdownEl.innerHTML = lines.join("");
+  }
+}
+
 function setMode(mode) {
   activeMode = mode;
   document.getElementById("tabXor").classList.toggle("active", mode === "xor");
   document.getElementById("tabPollock").classList.toggle("active", mode === "pollock");
   document.getElementById("tabKlee").classList.toggle("active", mode === "klee");
   document.getElementById("tabKandinsky").classList.toggle("active", mode === "kandinsky");
+  document.getElementById("tabCodec").classList.toggle("active", mode === "codec");
   document.getElementById("xorControls").style.display = mode === "xor" ? "flex" : "none";
   document.getElementById("pollockControls").style.display = mode === "pollock" ? "flex" : "none";
   document.getElementById("kleeControls").style.display = mode === "klee" ? "flex" : "none";
   document.getElementById("kandinskyControls").style.display = mode === "kandinsky" ? "flex" : "none";
+  document.getElementById("codecControls").style.display = mode === "codec" ? "flex" : "none";
+
+  const isCodec = mode === "codec";
+  document.querySelector(".lab").style.display = isCodec ? "none" : "grid";
+  document.getElementById("decompPanel").style.display = isCodec ? "none" : "block";
+  document.getElementById("grid").style.display = isCodec ? "none" : "grid";
+  document.getElementById("codecPanel").style.display = isCodec ? "block" : "none";
+
   document.getElementById("mainSubtitle").innerHTML = mode === "xor"
     ? 'Under the hood: 9×9 binary matrices over &#x1D53D;<sub>2</sub>[x,y]/(x<sup>9</sup>−1, y<sup>9</sup>−1). Every presentation style is 100% lossless and convertible back to 0/1.'
     : mode === "pollock"
     ? 'Each prime factor seeds a deterministic PRNG with its own color and Jackson Pollock-style drip path; composites superimpose their factor paths.'
     : mode === "klee"
     ? 'Inspired by Paul Klee (1914): each prime factor paints a translucent watercolor band with its own width, color, and starting point, wrapping with stroke-width spacing.'
-    : 'Inspired by Kandinsky (Composition VIII, 1923): each prime maps to a geometric form (circles, polygons, line bundles, semicircles) with outline/fill/rotation and concentric multiplicity.';
-  renderLab();
-  renderFactorizationPanel(selectedN);
-  renderGrid();
+    : mode === "kandinsky"
+    ? 'Inspired by Kandinsky (Composition VIII, 1923): each prime maps to a geometric form (circles, polygons, line bundles, semicircles) with outline/fill/rotation and concentric multiplicity.'
+    : 'Single-canvas Text-to-Art Codec: encodes arbitrary UTF-8 text as prime-indexed Translucent Multiply Glazes with an optional Venetian crimson top-skein for RTS registration.';
+
+  if (isCodec) {
+    renderCodecArt();
+  } else {
+    renderLab();
+    renderFactorizationPanel(selectedN);
+    renderGrid();
+  }
 }
 
 document.getElementById("tabXor").addEventListener("click", () => setMode("xor"));
 document.getElementById("tabPollock").addEventListener("click", () => setMode("pollock"));
 document.getElementById("tabKlee").addEventListener("click", () => setMode("klee"));
 document.getElementById("tabKandinsky").addEventListener("click", () => setMode("kandinsky"));
+document.getElementById("tabCodec").addEventListener("click", () => setMode("codec"));
+document.getElementById("codecText").addEventListener("input", renderCodecArt);
+["codecAlpha", "codecSize", "codecTopSkein"].forEach(id => {
+  document.getElementById(id).addEventListener("change", renderCodecArt);
+});
+document.getElementById("btnCodecDownload").addEventListener("click", () => {
+  const canvas = document.getElementById("codecCanvas");
+  const raw = document.getElementById("codecText").value || "empty";
+  const slug = raw.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 24) || "text";
+  canvas.toBlob(blob => {
+    if (blob) triggerDownload(blob, `pollock_codec_${slug}.png`);
+  }, "image/png");
+});
 
 function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);

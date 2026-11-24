@@ -79,18 +79,22 @@ Table~\ref{tab:params} summarizes the trajectory and color parameters used in th
   \centering
   \caption{Pollock synthesis parameters across the integer-factorization regime (Sections~2--4) and the single-canvas message codec (Section~\ref{sec:codec}).}
   \label{tab:params}
-  \small
-  \begin{tabular}{@{}lcc@{}}
+  \footnotesize
+  \begin{tabular}{@{}llll@{}}
     \toprule
-    Parameter & Integer Factorization ($n \le 120$) & Single-Canvas Codec ($K$ bits) \\
+    Parameter & Factorization ($n \le 120$) & Codec Data ($K$ bits) & Codec Top-Skein ($T_0$) \\
     \midrule
-    Canvas size $S \times S$ & $100 \times 100$ (also $64$--$256$) & $512 \times 512$ \\
-    Margin & $8\%$ ($0.08S$) & $10\%$ ($0.10S$); top-skein $12\%$ \\
-    Steps per prime stroke & $32$ & $28$; top-skein $26$ \\
-    Width scale & $0.048S$ & $0.022S$; top-skein $0.028S$ \\
-    Opacity $\alpha$ (TMG) & $0.396$ & $0.50$ \\
-    Hue range & $[0^\circ, 360^\circ)$ & $[28^\circ, 330^\circ]$ (avoids crimson $T_0$) \\
-    Saturation / Lightness & $72 + (13j \bmod 18)\%$, $L=42\%$ & $66 + (13i \bmod 18)\%$, $L=43\%$ \\
+    \multicolumn{4}{@{}l}{\emph{Canvas \& Trajectory}} \\
+    Canvas size $S \times S$ & $100 \times 100$ ($64$--$256$ ablation) & $512 \times 512$ & $512 \times 512$ (shared) \\
+    Margin & $8\%$ ($0.08S$) & $10\%$ ($0.10S$) & $12\%$ ($0.12S$) \\
+    Steps per stroke & $32$ & $28$ & $26$ \\
+    Width scale & $0.048S$ & $0.022S$ & $0.028S$ \\
+    \addlinespace
+    \multicolumn{4}{@{}l}{\emph{Color \& Compositing}} \\
+    Opacity $\alpha$ (TMG) & $0.396$ & $0.50$ & $1.00$ (opaque) \\
+    Hue range & $[0^\circ, 360^\circ)$ & $[28^\circ, 330^\circ]$ & Crimson (\texttt{\#8b101c}) \\
+    Saturation & $72\% + (13j \bmod 18)\%$ & $66\% + (13i \bmod 18)\%$ & Fixed RGB $(139,16,28)$ \\
+    Lightness & $42\%$ ($-7\% \bmod 3$ if $k>1$) & $43\%$ & Fixed RGB $(139,16,28)$ \\
     \bottomrule
   \end{tabular}
 \end{table}

@@ -13,8 +13,8 @@ from PIL import Image, ImageDraw
 from algebra import primes_up_to
 from verify_decomposition import hex_to_rgb, hsl_to_rgb, mulberry32
 
-# Foundational organic Pollock pour color (deep Venetian umber-crimson, integrated into the painting)
-BASE_POUR_HEX = "#6e171e"
+# Foundational organic Pollock top-skein color (deep Venetian crimson, integrated into the painting)
+BASE_POUR_HEX = "#8b101c"
 BASE_POUR_RGB = np.array(hex_to_rgb(BASE_POUR_HEX), dtype=np.float32)
 BG_HEX = "#f4efe6"
 BG_RGB = np.array(hex_to_rgb(BG_HEX), dtype=np.float32)
@@ -86,32 +86,31 @@ def render_base_pour_mask(size: int = 512) -> np.ndarray:
     return render_stroke_mask(seed=0x20261124, size=size, steps=26, margin_frac=0.12, lw_scale=0.028)
 
 
-def encode_message_pollock(message: str, size: int = 512, alpha: float = 0.52) -> Tuple[Image.Image, List[int]]:
-    """Encode an ASCII/UTF-8 string onto a single Pollock canvas with an organic base pour."""
-    raw = message.encode("utf-8")
-    bits: List[int] = []
-    for byte in raw:
-        for b in range(7, -1, -1):
-            bits.append((byte >> b) & 1)
-
+def encode_bits_pollock(bits: List[int], size: int = 512, alpha: float = 0.50) -> Image.Image:
+    """Encode an arbitrary bit list onto a single Pollock canvas with an opaque organic top-skein."""
     primes = get_first_k_primes(len(bits))
     canvas = np.broadcast_to(BG_RGB, (size, size, 3)).copy()
 
-    # 1. Paint data prime strokes via multiply glazing
     for idx, (bit, p) in enumerate(zip(bits, primes)):
         if bit == 1:
             rgb, mask = render_prime_stroke_mask(p, idx, size=size)
             col = rgb.astype(np.float32) / 255.0
             canvas[mask] *= (1.0 - alpha) + alpha * col
 
-    # 2. Paint the organic foundational pour (integrated inside the painting, no external dots)
+    # Paint the organic Pollock top-skein (uniform pigment for clean Fourier-Mellin registration)
     base_mask = render_base_pour_mask(size=size)
-    base_col = BASE_POUR_RGB / 255.0
-    base_alpha = 0.82
-    canvas[base_mask] *= (1.0 - base_alpha) + base_alpha * base_col
+    canvas[base_mask] = BASE_POUR_RGB
+    return Image.fromarray(np.clip(np.round(canvas), 0, 255).astype(np.uint8))
 
-    img = Image.fromarray(np.clip(np.round(canvas), 0, 255).astype(np.uint8))
-    return img, bits
+
+def encode_message_pollock(message: str, size: int = 512, alpha: float = 0.50) -> Tuple[Image.Image, List[int]]:
+    """Encode an ASCII/UTF-8 string onto a single Pollock canvas with an organic top-skein."""
+    raw = message.encode("utf-8")
+    bits: List[int] = []
+    for byte in raw:
+        for b in range(7, -1, -1):
+            bits.append((byte >> b) & 1)
+    return encode_bits_pollock(bits, size=size, alpha=alpha), bits
 
 
 def apply_rts_distortion(
@@ -154,14 +153,10 @@ def apply_rts_distortion(
 
 
 def extract_base_pour_score(arr: np.ndarray) -> np.ndarray:
-    """Extract soft response map for the foundational Venetian umber-crimson pour."""
-    # Expected RGB of the base pour on the linen ground
-    target = BG_RGB * ((1.0 - 0.82) + 0.82 * (BASE_POUR_RGB / 255.0))
-    diff = arr.astype(np.float32) - target
+    """Extract soft response map for the opaque Venetian crimson top-skein."""
+    diff = arr.astype(np.float32) - BASE_POUR_RGB
     dist = np.sqrt(np.sum(diff ** 2, axis=2))
-    # Also respond if darkened further by overlapping prime glazes (low G, low B, dark R)
-    score = np.exp(-(dist / 38.0) ** 2)
-    return score.astype(np.float32)
+    return np.exp(-(dist / 30.0) ** 2).astype(np.float32)
 
 
 def logpolar_fft_register(ref: np.ndarray, mov: np.ndarray) -> Tuple[float, float, float, float]:
@@ -335,29 +330,44 @@ def align_image_organic(distorted: Image.Image, target_size: int = 512) -> Image
     return coarse
 
 
-def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha: float = 0.52) -> Tuple[str, List[int]]:
-    """Decode n_bits from an aligned Pollock canvas using soft matched-filter scoring."""
-    aligned = align_image_organic(img, target_size=size)
-    arr = np.array(aligned, dtype=np.float32)
-    residual = np.clip(arr / BG_RGB, 0.0, 1.0)
-
-    # Mask out the foundational pour pixels so they don't bias data bit scores
-    base_mask = render_base_pour_mask(size=size)
-
+def build_log_decoder(n_bits: int, size: int = 512, alpha: float = 0.50):
+    """Precompute Gram inverse G_inv and per-prime log-attenuation vectors for linear decoding."""
     primes = get_first_k_primes(n_bits)
-    rec_bits: List[int] = []
+    base_mask = render_base_pour_mask(size=size)
+    l_vecs = []
     for idx, p in enumerate(primes):
         rgb, mask = render_prime_stroke_mask(p, idx, size=size)
-        valid_mask = mask & (~base_mask)
-        if not np.any(valid_mask):
-            valid_mask = mask
         col = rgb.astype(np.float32) / 255.0
-        expected_att = (1.0 - alpha) + alpha * col
+        att = (1.0 - alpha) + alpha * col
+        l_vecs.append((mask & (~base_mask), -np.log(np.clip(att, 1e-4, 1.0))))
 
-        pix_res = residual[valid_mask]
-        match_frac = float(np.mean(np.all(pix_res <= expected_att + 0.10, axis=1)))
-        rec_bits.append(1 if match_frac >= 0.68 else 0)
+    G = np.zeros((n_bits, n_bits), dtype=np.float64)
+    for i in range(n_bits):
+        mi, li = l_vecs[i]
+        for j in range(i, n_bits):
+            mj, lj = l_vecs[j]
+            ov = int(np.sum(mi & mj))
+            if ov > 0:
+                G[i, j] = G[j, i] = ov * float(np.dot(li, lj))
+    G_inv = np.linalg.inv(G + 1e-3 * np.eye(n_bits))
+    return l_vecs, G_inv
 
+
+def decode_bits_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha: float = 0.50, precomp=None) -> List[int]:
+    """Decode n_bits from a distorted Pollock canvas using Fourier-Mellin alignment + log-attenuation solver."""
+    l_vecs, G_inv = precomp if precomp is not None else build_log_decoder(n_bits, size=size, alpha=alpha)
+    aligned = align_image_organic(img, target_size=size)
+    arr = np.array(aligned, dtype=np.float32)
+    res = np.clip(arr / BG_RGB, 1e-3, 1.0)
+    L_obs = -np.log(res)
+    y = np.array([float(np.sum(L_obs[mi] @ li)) for mi, li in l_vecs], dtype=np.float64)
+    b_hat = G_inv @ y
+    return [1 if v >= 0.5 else 0 for v in b_hat]
+
+
+def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha: float = 0.50) -> Tuple[str, List[int]]:
+    """Decode UTF-8 message from a distorted Pollock canvas."""
+    rec_bits = decode_bits_pollock(img, n_bits, size=size, alpha=alpha)
     out_bytes = bytearray()
     for i in range(0, len(rec_bits), 8):
         val = 0
@@ -367,10 +377,45 @@ def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha
     return out_bytes.decode("utf-8", errors="replace"), rec_bits
 
 
+def run_monte_carlo(n_bits: int = 128, n_trials: int = 20, size: int = 512, alpha: float = 0.50) -> None:
+    """Run Monte Carlo RTS + compression/noise benchmark for random n_bits messages."""
+    precomp = build_log_decoder(n_bits, size=size, alpha=alpha)
+    rng = np.random.default_rng(2026)
+    clean_ok = rts_ok = noise_ok = 0
+    clean_bits = rts_bits = noise_bits = 0
+
+    for trial in range(n_trials):
+        bits = rng.integers(0, 2, size=n_bits).tolist()
+        img = encode_bits_pollock(bits, size=size, alpha=alpha)
+
+        rec_c = decode_bits_pollock(img, n_bits, size=size, alpha=alpha, precomp=precomp)
+        mc = sum(a == b for a, b in zip(bits, rec_c))
+        clean_bits += mc; clean_ok += (mc == n_bits)
+
+        ang = float(rng.uniform(-180, 180))
+        sc = float(rng.uniform(0.80, 1.20))
+        sh = (float(rng.uniform(-20, 20)), float(rng.uniform(-20, 20)))
+
+        dist = apply_rts_distortion(img, angle_deg=ang, scale=sc, shift=sh, jpeg_quality=80)
+        rec_r = decode_bits_pollock(dist, n_bits, size=size, alpha=alpha, precomp=precomp)
+        mr = sum(a == b for a, b in zip(bits, rec_r))
+        rts_bits += mr; rts_ok += (mr == n_bits)
+
+        dist_n = apply_rts_distortion(img, angle_deg=ang, scale=sc, shift=sh, noise_std=8.0, seed=trial)
+        rec_n = decode_bits_pollock(dist_n, n_bits, size=size, alpha=alpha, precomp=precomp)
+        mn = sum(a == b for a, b in zip(bits, rec_n))
+        noise_bits += mn; noise_ok += (mn == n_bits)
+
+    print(f"Monte Carlo ({n_bits}-bit, {n_trials} trials, {size}x{size}):")
+    print(f"  Clean:             {clean_ok}/{n_trials} exact msgs | {clean_bits}/{n_trials*n_bits} bits ({100*clean_bits/(n_trials*n_bits):.2f}%)")
+    print(f"  Random RTS+JPEG80: {rts_ok}/{n_trials} exact msgs | {rts_bits}/{n_trials*n_bits} bits ({100*rts_bits/(n_trials*n_bits):.2f}%)")
+    print(f"  Random RTS+Noise8: {noise_ok}/{n_trials} exact msgs | {noise_bits}/{n_trials*n_bits} bits ({100*noise_bits/(n_trials*n_bits):.2f}%)")
+
+
 if __name__ == "__main__":
     msg = "Leonardo"
-    canvas_img, true_bits = encode_message_pollock(msg, size=512, alpha=0.52)
-    print(f"Encoded '{msg}' ({len(true_bits)} bits, primes 2..{get_first_k_primes(len(true_bits))[-1]}) on 1 canvas (512x512, organic base pour).")
+    canvas_img, true_bits = encode_message_pollock(msg, size=512, alpha=0.50)
+    print(f"Encoded '{msg}' ({len(true_bits)} bits, primes 2..{get_first_k_primes(len(true_bits))[-1]}) on 1 canvas (512x512, organic top-skein).")
 
     scenarios = [
         ("Clean canonical", dict(angle_deg=0.0, scale=1.0, shift=(0, 0), noise_std=0.0, jpeg_quality=None)),
@@ -379,8 +424,13 @@ if __name__ == "__main__":
         ("Rotated -38 deg, Gaussian noise std=8", dict(angle_deg=-38.0, scale=0.95, shift=(10, 12), noise_std=8.0, jpeg_quality=None)),
     ]
 
+    pre64 = build_log_decoder(len(true_bits), size=512, alpha=0.50)
     for label, kw in scenarios:
         distorted = apply_rts_distortion(canvas_img, **kw)
-        rec_msg, rec_bits = decode_message_pollock(distorted, len(true_bits), size=512, alpha=0.52)
+        rec_bits = decode_bits_pollock(distorted, len(true_bits), size=512, alpha=0.50, precomp=pre64)
+        out_b = bytearray(int("".join(str(b) for b in rec_bits[i:i+8]), 2) for i in range(0, len(rec_bits), 8))
+        rec_msg = out_b.decode("utf-8", errors="replace")
         bit_acc = sum(t == r for t, r in zip(true_bits, rec_bits))
         print(f"  [{label}] -> '{rec_msg}' | bits: {bit_acc}/{len(true_bits)}")
+
+    run_monte_carlo(n_bits=128, n_trials=20, size=512, alpha=0.50)

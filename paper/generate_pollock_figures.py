@@ -164,7 +164,7 @@ def fig3_pollock_peeling() -> None:
 
 
 def fig4_pollock_leonardo_rts() -> None:
-    img, _ = encode_message_pollock("Leonardo", size=512, alpha=0.52)
+    img, _ = encode_message_pollock("Leonardo", size=512, alpha=0.50)
     d1 = apply_rts_distortion(img, angle_deg=143.0, scale=1.15, shift=(-22, 15), jpeg_quality=80)
     a1 = align_image_organic(d1, target_size=512)
     d2 = apply_rts_distortion(img, angle_deg=-38.0, scale=0.95, shift=(10, 12), noise_std=8.0, seed=1)

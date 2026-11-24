@@ -148,7 +148,7 @@ Table~\ref{tab:proscons} summarizes the trade-offs between the two paradigms.
   \centering
   \caption{Comparison of Pollock visual homomorphisms and generative grammars.}
   \label{tab:proscons}
-  \small
+  \footnotesize
   \begin{tabular}{@{}p{3.0cm}p{5.1cm}p{5.1cm}@{}}
     \toprule
     Criterion & Visual Homomorphism & Generative Grammar \\
@@ -190,15 +190,15 @@ As shown in Table~\ref{tab:verification}, all four Pollock variants achieve $120
   \centering
   \caption{Empirical uniqueness, blind recovery, and homomorphism checks ($n = 1 \dots 120$, $100 \times 100$ RGB; identical $120/120$ scores also hold at $64 \times 64$, $128 \times 128$, and $256 \times 256$).}
   \label{tab:verification}
-  \small
-  \begin{tabular}{@{}lccc@{}}
+  \footnotesize
+  \begin{tabular}{@{}llll@{}}
     \toprule
     Pollock Variant & Unique Images & Exact Recovery & Hom.\ Errors \\
     \midrule
-    Separate Strokes (opaque) & $120 / 120$ & $120 / 120$ & --- \\
-    Path Extent (prefix-preserving) & $120 / 120$ & $120 / 120$ & --- \\
-    Translucent Multiply Glazing (TMG) & $120 / 120$ & $120 / 120$ & $0$ (pixel) \\
-    Toroidal Trajectory Sum (TTS) & $120 / 120$ & $120 / 120$ & $0$ (vector) \\
+    Separate Strokes (opaque) & $120/120$ & $120/120$ & --- \\
+    Path Extent (prefix-preserving) & $120/120$ & $120/120$ & --- \\
+    Translucent Multiply Glazing (TMG) & $120/120$ & $120/120$ & $0$ (pixel) \\
+    Toroidal Trajectory Sum (TTS) & $120/120$ & $120/120$ & $0$ (vector) \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -235,7 +235,7 @@ Compared with standard 2D machine codes such as QR or Data Matrix—which pack h
   \caption{Single-canvas recovery across all $512 \times 512$ Pollock distortion regimes: $64$-bit \texttt{"MathArts"} and $100$-trial $128$-bit Monte Carlo (with mean $\pm$ std bit errors per trial and mean decode time).}
   \label{tab:rts}
   \footnotesize
-  \begin{tabular}{@{}lccc@{}}
+  \begin{tabular}{@{}llll@{}}
     \toprule
     Distortion Scenario & \texttt{"MathArts"} (64-bit) & 128-bit Monte Carlo (100 trials) & Decode (ms) \\
     \midrule

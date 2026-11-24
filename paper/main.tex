@@ -178,21 +178,21 @@ To make single-canvas decoding resilient to \emph{rotation, translation, and sca
   \label{fig:leonardo_rts}
 \end{figure}
 
-Table~\ref{tab:rts} and Figure~\ref{fig:leonardo_rts} report our RTS stress-test results for \texttt{"Leonardo"} ($64$ bits, $64/64$ exact recovery across all four regimes), as well as a $20$-trial Monte Carlo simulation of random $128$-bit messages (primes $2 \dots 719$ on $512 \times 512$) under random rotations in $[-180^\circ, 180^\circ]$, scales in $[0.80, 1.20]$, shifts in $[-20, 20]^2$, JPEG compression ($q=80$), and Gaussian noise ($\sigma=8$), achieving $20/20$ exact message recovery ($2560/2560$ bits, $100\%$) in every regime. Note that while unbounded trajectory sums are hard to invert from static bitmaps, the underlying map $\mathbf{e} \mapsto \gamma_n$ is linear in the exponent vector and therefore serves as an \emph{artistic watermark or visual code} rather than a cryptographic primitive.
+Table~\ref{tab:rts} and Figure~\ref{fig:leonardo_rts} report our RTS stress-test results for \texttt{"Leonardo"} ($64$ bits, $64/64$ exact recovery across all four regimes), alongside a $100$-trial Monte Carlo simulation of random $128$-bit messages (primes $2 \dots 719$ on $512 \times 512$, $12{,}800$ bits per regime) under random rotations in $[-180^\circ, 180^\circ]$, scales in $[0.80, 1.20]$, and shifts in $[-20, 20]^2$. On clean canvases, recovery is $100/100$ exact messages ($100.00\%$ bits); under combined random RTS + JPEG ($q=80$) or Gaussian noise ($\sigma=8$), bit-level accuracy remains $99.69\%$ and $99.72\%$, yielding $86/100$ exact uncoded $128$-bit messages (a raw bit error rate of $\approx 0.3\%$, well within reach of standard lightweight error-correcting codes). Note that while unbounded trajectory sums are hard to invert from static bitmaps, the underlying map $\mathbf{e} \mapsto \gamma_n$ is linear in the exponent vector and therefore serves as an \emph{artistic watermark or visual code} rather than a cryptographic primitive.
 
 \begin{table}[ht]
   \centering
-  \caption{Single-canvas recovery ($512 \times 512$ Pollock canvas): $64$-bit \texttt{"Leonardo"} and $20$-trial $128$-bit Monte Carlo.}
+  \caption{Single-canvas recovery ($512 \times 512$ Pollock canvas): $64$-bit \texttt{"Leonardo"} and $100$-trial $128$-bit Monte Carlo.}
   \label{tab:rts}
   \small
   \begin{tabular}{@{}lcc@{}}
     \toprule
-    Distortion Scenario & \texttt{"Leonardo"} (64-bit) & 128-bit Monte Carlo (20 trials) \\
+    Distortion Scenario & \texttt{"Leonardo"} (64-bit) & 128-bit Monte Carlo (100 trials) \\
     \midrule
-    Clean canonical & $64 / 64$ ($100\%$) & $20/20$ msgs ($2560/2560$ bits, $100\%$) \\
-    Random / $27^\circ$ RTS (lossless) & $64 / 64$ ($100\%$) & --- \\
-    Random / $143^\circ$ RTS + JPEG $q=80$ & $64 / 64$ ($100\%$) & $20/20$ msgs ($2560/2560$ bits, $100\%$) \\
-    Random / $-38^\circ$ RTS + noise $\sigma = 8$ & $64 / 64$ ($100\%$) & $20/20$ msgs ($2560/2560$ bits, $100\%$) \\
+    Clean canonical & $64 / 64$ ($100\%$) & $100/100$ msgs ($12800/12800$ bits, $100.00\%$) \\
+    $27^\circ$ RTS (lossless) & $64 / 64$ ($100\%$) & --- \\
+    RTS + JPEG $q=80$ & $64 / 64$ ($100\%$) & $86/100$ msgs ($12760/12800$ bits, $99.69\%$) \\
+    RTS + noise $\sigma = 8$ & $64 / 64$ ($100\%$) & $86/100$ msgs ($12764/12800$ bits, $99.72\%$) \\
     \bottomrule
   \end{tabular}
 \end{table}

@@ -377,7 +377,7 @@ def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha
     return out_bytes.decode("utf-8", errors="replace"), rec_bits
 
 
-def run_monte_carlo(n_bits: int = 128, n_trials: int = 20, size: int = 512, alpha: float = 0.50) -> None:
+def run_monte_carlo(n_bits: int = 128, n_trials: int = 100, size: int = 512, alpha: float = 0.50) -> None:
     """Run Monte Carlo RTS + compression/noise benchmark for random n_bits messages."""
     precomp = build_log_decoder(n_bits, size=size, alpha=alpha)
     rng = np.random.default_rng(2026)
@@ -433,4 +433,4 @@ if __name__ == "__main__":
         bit_acc = sum(t == r for t, r in zip(true_bits, rec_bits))
         print(f"  [{label}] -> '{rec_msg}' | bits: {bit_acc}/{len(true_bits)}")
 
-    run_monte_carlo(n_bits=128, n_trials=20, size=512, alpha=0.50)
+    run_monte_carlo(n_bits=128, n_trials=100, size=512, alpha=0.50)

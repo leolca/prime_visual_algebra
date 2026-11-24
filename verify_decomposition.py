@@ -378,16 +378,14 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
         prime_curves[p] = np.stack([dx, dy], axis=1)
 
     curves: Dict[int, np.ndarray] = {}
+    rendered_imgs: Dict[int, np.ndarray] = {}
     hashes: Dict[bytes, List[int]] = {}
     bg = hex_to_rgb("#f4efe6")
-    for n in range(1, max_n + 1):
-        facs = factorize(n)
+
+    def render_from_facs(facs: Dict[int, int]) -> np.ndarray:
         gamma = np.zeros((num_pts + 1, 2), dtype=np.float64)
         for p, e in facs.items():
             gamma += e * prime_curves[p]
-        curves[n] = gamma
-
-        # Render image
         img = Image.new("RGB", (size, size), bg)
         draw = ImageDraw.Draw(img)
         if facs:
@@ -404,16 +402,54 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
             for i in range(len(pts) - 1):
                 if math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) <= span * 0.45:
                     draw.line([pts[i], pts[i + 1]], fill=col, width=2)
-        hashes.setdefault(np.array(img).tobytes(), []).append(n)
+        return np.array(img)
+
+    for n in range(1, max_n + 1):
+        facs = factorize(n)
+        gamma = np.zeros((num_pts + 1, 2), dtype=np.float64)
+        for p, e in facs.items():
+            gamma += e * prime_curves[p]
+        curves[n] = gamma
+        arr = render_from_facs(facs)
+        rendered_imgs[n] = arr
+        hashes.setdefault(arr.tobytes(), []).append(n)
 
     hom_errors = 0
     for a in range(1, max_n + 1):
         for b in range(a, max_n // a + 1):
-            if not np.allclose(curves[a] + curves[b], curves[a * b], atol=1e-12):
+            if not np.allclose((curves[a] + curves[b]) % 1.0, curves[a * b] % 1.0, atol=1e-12):
                 hom_errors += 1
+
+    # Blind prime-spectrum DFS over products <= max_n (no composite lookup table)
+    def decompose_traj(target_bytes: bytes) -> Dict[int, int] | None:
+        if target_bytes == render_from_facs({}).tobytes():
+            return {}
+        def search(idx: int, cur_n: int, cur_facs: Dict[int, int]) -> Dict[int, int] | None:
+            if cur_n > 1 and render_from_facs(cur_facs).tobytes() == target_bytes:
+                return dict(cur_facs)
+            for i in range(idx, len(PRIMES)):
+                p = PRIMES[i]
+                if cur_n * p > max_n:
+                    break
+                cur_facs[p] = cur_facs.get(p, 0) + 1
+                res = search(i, cur_n * p, cur_facs)
+                if res is not None:
+                    return res
+                if cur_facs[p] == 1:
+                    del cur_facs[p]
+                else:
+                    cur_facs[p] -= 1
+            return None
+        return search(0, 1, {})
+
+    rec_errors = 0
+    for n in range(1, max_n + 1):
+        if decompose_traj(rendered_imgs[n].tobytes()) != factorize(n):
+            rec_errors += 1
 
     print(f"[pollock_trajectory] Vector homomorphism errors: {hom_errors}")
     print(f"[pollock_trajectory] Unique images: {len(hashes)}/{max_n}")
+    print(f"[pollock_trajectory] Blind prime-spectrum recovery: {max_n - rec_errors}/{max_n} exact ({rec_errors} errors)")
 
 
 def render_pollock_layer(p: int, k: int, size: int = 100, steps: int = 32) -> Tuple[np.ndarray, np.ndarray]:
@@ -681,16 +717,14 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
         prime_curves[p] = np.stack([dx, dy], axis=1)
 
     curves: Dict[int, np.ndarray] = {}
+    rendered_imgs: Dict[int, np.ndarray] = {}
     hashes: Dict[bytes, List[int]] = {}
     bg = hex_to_rgb("#f4efe6")
-    for n in range(1, max_n + 1):
-        facs = factorize(n)
+
+    def render_from_facs(facs: Dict[int, int]) -> np.ndarray:
         gamma = np.zeros((num_pts + 1, 2), dtype=np.float64)
         for p, e in facs.items():
             gamma += e * prime_curves[p]
-        curves[n] = gamma
-
-        # Render image
         img = Image.new("RGB", (size, size), bg)
         draw = ImageDraw.Draw(img)
         if facs:
@@ -707,16 +741,54 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
             for i in range(len(pts) - 1):
                 if math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) <= span * 0.45:
                     draw.line([pts[i], pts[i + 1]], fill=col, width=2)
-        hashes.setdefault(np.array(img).tobytes(), []).append(n)
+        return np.array(img)
+
+    for n in range(1, max_n + 1):
+        facs = factorize(n)
+        gamma = np.zeros((num_pts + 1, 2), dtype=np.float64)
+        for p, e in facs.items():
+            gamma += e * prime_curves[p]
+        curves[n] = gamma
+        arr = render_from_facs(facs)
+        rendered_imgs[n] = arr
+        hashes.setdefault(arr.tobytes(), []).append(n)
 
     hom_errors = 0
     for a in range(1, max_n + 1):
         for b in range(a, max_n // a + 1):
-            if not np.allclose(curves[a] + curves[b], curves[a * b], atol=1e-12):
+            if not np.allclose((curves[a] + curves[b]) % 1.0, curves[a * b] % 1.0, atol=1e-12):
                 hom_errors += 1
+
+    # Blind prime-spectrum DFS over products <= max_n (no composite lookup table)
+    def decompose_traj(target_bytes: bytes) -> Dict[int, int] | None:
+        if target_bytes == render_from_facs({}).tobytes():
+            return {}
+        def search(idx: int, cur_n: int, cur_facs: Dict[int, int]) -> Dict[int, int] | None:
+            if cur_n > 1 and render_from_facs(cur_facs).tobytes() == target_bytes:
+                return dict(cur_facs)
+            for i in range(idx, len(PRIMES)):
+                p = PRIMES[i]
+                if cur_n * p > max_n:
+                    break
+                cur_facs[p] = cur_facs.get(p, 0) + 1
+                res = search(i, cur_n * p, cur_facs)
+                if res is not None:
+                    return res
+                if cur_facs[p] == 1:
+                    del cur_facs[p]
+                else:
+                    cur_facs[p] -= 1
+            return None
+        return search(0, 1, {})
+
+    rec_errors = 0
+    for n in range(1, max_n + 1):
+        if decompose_traj(rendered_imgs[n].tobytes()) != factorize(n):
+            rec_errors += 1
 
     print(f"[pollock_trajectory] Vector homomorphism errors: {hom_errors}")
     print(f"[pollock_trajectory] Unique images: {len(hashes)}/{max_n}")
+    print(f"[pollock_trajectory] Blind prime-spectrum recovery: {max_n - rec_errors}/{max_n} exact ({rec_errors} errors)")
 
 
 def test_uniqueness_and_peeling(mode: str, max_n: int = 120, size: int = 100) -> None:

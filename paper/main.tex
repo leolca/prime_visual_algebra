@@ -196,7 +196,7 @@ A central question for any visual number representation is whether an algorithm 
   \label{fig:peeling}
 \end{figure}
 
-Table~\ref{tab:verification} summarizes our empirical verification across all $n \in \{1, \dots, 120\}$ on $100 \times 100$ lossless renders: every system achieves $120/120$ unique images, all four base modes (plus Pollock Translucent Multiply) achieve $120/120$ exact blind factor recovery ($0$ errors), and both Pollock homomorphism variants exhibit $0$ homomorphism errors across all $a \cdot b \le 120$.
+Table~\ref{tab:verification} summarizes our empirical verification across all $n \in \{1, \dots, 120\}$ on $100 \times 100$ lossless renders: all seven variants achieve $120/120$ unique images and $120/120$ exact blind factor recovery ($0$ errors), and the three homomorphism modes exhibit $0$ homomorphism errors across all $a \cdot b \le 120$.
 
 \begin{table}[ht]
   \centering
@@ -211,7 +211,7 @@ Table~\ref{tab:verification} summarizes our empirical verification across all $n
     1b. Binary OR-Grammar ($9 \times 9$) & $120 / 120$ & $120 / 120$ & --- \\
     2a. Pollock Drip-Paths (opaque, $100^2$) & $120 / 120$ & $120 / 120$ & --- \\
     2b. Pollock Translucent Multiply ($100^2$) & $120 / 120$ & $120 / 120$ & $0$ (pixel) \\
-    2c. Pollock Trajectory Vector Sum ($100^2$) & $120 / 120$ & --- & $0$ (vector) \\
+    2c. Pollock Trajectory Vector Sum ($100^2$) & $120 / 120$ & $120 / 120$ & $0$ (vector) \\
     3. Klee 1914 Watercolor ($100^2$) & $120 / 120$ & $120 / 120$ & --- \\
     4. Kandinsky \emph{Comp.\ VIII} ($100^2$) & $120 / 120$ & $120 / 120$ & --- \\
     \bottomrule

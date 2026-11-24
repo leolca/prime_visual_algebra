@@ -63,9 +63,14 @@ In \emph{Prime concerns: painting number patterns}, \citet{ashwell2020prime} ass
 \section{Pollock's Action Painting as a Prime-Factor Medium}
 Pollock's mature drip paintings abandon a single focal center in favor of an ``all-over'' field of interwoven poured-paint trajectories. Rapid arm motions produce thin filaments, while pauses and direction changes pool into thicker droplets and satellite splatters. This physical grammar maps naturally onto prime-factor synthesis:
 \begin{itemize}
-  \item \textbf{Chromatic prime identity:} Each prime $p$ (indexed by $j \in \{0, 1, \dots\}$) is assigned a distinct hue via golden-angle spacing, $H(p) = (j \cdot 137.508^\circ + 18^\circ) \bmod 360^\circ$, ensuring maximal perceptual separation across small primes.
-  \item \textbf{Deterministic drip trajectory:} Each prime occurrence $(p, k)$ seeds a deterministic pseudorandom generator (\texttt{mulberry32}) that drives a momentum-perturbed random walk inside an $8\%$ canvas margin, reflecting softly at boundaries. Consecutive steps are joined by quadratic B\'ezier curves whose stroke width varies inversely with step speed, accompanied by probabilistic paint pools and spray droplets.
-  \item \textbf{Identity element:} The unit $n = 1$ corresponds to the blank, unprimed linen ground ($I_{\mathrm{bg}}$).
+  \item \textbf{Chromatic prime identity:} Each prime $p$ (indexed by $j \in \{0, 1, \dots\}$) is assigned an HSL color with golden-angle hue $H(p) = (j \cdot 137.508^\circ + 18^\circ) \bmod 360^\circ$, saturation $S(j) = 72 + (13j \bmod 18)\%$, and lightness $L = 42\%$ (shifted by $-7\%$ modulo $3$ for repeated strokes $k > 1$ in opaque mode).
+  \item \textbf{Deterministic drip trajectory:} Each prime occurrence $(p, k)$ seeds the 32-bit \texttt{mulberry32} PRNG with $\mathrm{seed}(p,k) = (p \cdot 2654435761) \oplus (k \cdot 40503311)$ (modulo $2^{32}$). Starting from a uniform point inside an $8\%$ canvas margin ($m = 0.08S$, span $W = S - 2m$) with initial heading $\theta_0 \sim \mathcal{U}[0, 2\pi)$ and speed $v_0 \sim \mathcal{U}[0.08S, 0.22S]$, each step $t = 1, \dots, 32$ updates:
+  \[
+    \theta_t = \theta_{t-1} + \delta_\theta,\quad \delta_\theta \sim \mathcal{U}[-0.95, 0.95], \qquad
+    v_t = \operatorname{clip}\!\left(v_{t-1} \cdot \delta_v,\; 0.03S,\; 0.25S\right),\quad \delta_v \sim \mathcal{U}[0.75, 1.30],
+  \]
+  advancing $(x_t, y_t) = (x_{t-1} + v_t \cos\theta_t,\; y_{t-1} + v_t \sin\theta_t)$ with specular reflection at the margin boundaries. Segments are drawn as quadratic B\'ezier curves with a randomly perturbed midpoint control point and velocity-coupled width $w_t = \max(1,\; (1.15 - v_t / 0.25S)\, 0.048S)$, plus a paint pool (probability $0.38$) and $1$--$3$ spray droplets (probability $0.25$) per step.
+  \item \textbf{Identity element:} The unit $n = 1$ corresponds to the blank linen ground ($I_{\mathrm{bg}} = \texttt{\#f4efe6}$, RGB $(244, 239, 230)$).
 \end{itemize}
 
 \section{Homomorphism vs.\ Generative Grammar}
@@ -93,11 +98,15 @@ Like kanji radicals and Egyptian hieroglyphic quadrats \citep{goodman1968languag
     I(a) \star I(b) := I_{\mathrm{bg}} \odot \left(\frac{I(a)}{I_{\mathrm{bg}}}\right) \odot \left(\frac{I(b)}{I_{\mathrm{bg}}}\right)
   \end{equation}
   gives a strict commutative monoid homomorphism $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ for \emph{all} $a, b$ directly on flat images (Figure~\ref{fig:hom}, top).
-  \item \textbf{Toroidal Fourier Trajectory Sum (Vector Homomorphism):} Each prime $p$ is represented by a $6$-harmonic parametric curve $\gamma_p(t) \in \mathbb{R}^2$, $t \in [0, 1]$. Composites draw the pointwise vector sum wrapped on the flat $2$-torus $[0, 1)^2$:
+  \item \textbf{Toroidal Fourier Trajectory Sum (Vector Homomorphism):} Each prime $p$ seeds \texttt{mulberry32} with $(p \cdot 2654435761) \oplus \texttt{0x7f4a7c15}$ to sample a $6$-harmonic parametric curve $\gamma_p(t) \in \mathbb{R}^2$, $t \in [0, 1]$:
+  \[
+    \gamma_p(t) = \sum_{m=1}^{6} \left( a_{p,m}^{(x)} \cos\!\left(2\pi f_{p,m}^{(x)} t + \phi_{p,m}^{(x)}\right),\; a_{p,m}^{(y)} \sin\!\left(2\pi f_{p,m}^{(y)} t + \phi_{p,m}^{(y)}\right) \right),
+  \]
+  with integer frequencies $f_{p,m}^{(x)}, f_{p,m}^{(y)} \in \{1,\dots,7\}$, phases $\phi \sim \mathcal{U}[0, 2\pi)$, and amplitudes $a_{p,m} = (0.13/\sqrt{m})\cdot u$ ($u \sim \mathcal{U}[0.6, 1.4]$). Composites draw the pointwise vector sum wrapped on the flat $2$-torus $[0, 1)^2$ (skipping draw segments across wrap jumps):
   \begin{equation}
     \gamma_n(t) \equiv \sum_{i=1}^{r} e_i\,\gamma_{p_i}(t) \pmod{1},
   \end{equation}
-  colored by the $e_i$-weighted circular mean of prime hues. Because addition mod $1$ is commutative and associative, $\gamma_{a\cdot b} \equiv \gamma_a + \gamma_b \pmod{1}$ holds identically in trajectory space (Figure~\ref{fig:hom}, bottom).
+  colored by the $e_i$-weighted circular mean of prime hues ($S=74\%$, $L=40\%$). Because addition mod $1$ is commutative and associative, $\gamma_{a\cdot b} \equiv \gamma_a + \gamma_b \pmod{1}$ holds identically in trajectory space (Figure~\ref{fig:hom}, bottom).
 \end{enumerate}
 
 \begin{figure}[t]
@@ -161,23 +170,24 @@ As shown in Table~\ref{tab:verification}, all tested Pollock variants achieve $1
 \end{table}
 
 \section{Single-Canvas Message Encoding and RTS Resilience}
-Rather than splitting a multi-character message into separate tiles, we can encode an entire $K$-bit binary string onto \emph{one unified Pollock canvas} by assigning bit index $i \in \{0, \dots, K-1\}$ to the $i$-th prime $p_i$ (with exponent $1$ if bit $i$ is $1$, and $0$ otherwise) under translucent \texttt{multiply} glazing ($\alpha = 0.52$). Because each prime appears at most once, pixelwise saturation is avoided and the composition remains an organic ``all-over'' painting while retaining the pixel-level homomorphism on disjoint bit masks. For an $8$-character ASCII string such as \texttt{"MathArts"} ($64$ bits), only the first $64$ primes ($2 \dots 311$) are needed.
+Rather than splitting a multi-character message into separate tiles, we can encode an entire $K$-bit binary string onto \emph{one unified Pollock canvas} by assigning bit index $i \in \{0, \dots, K-1\}$ to the $i$-th prime $p_i$ (with exponent $1$ if bit $i$ is $1$, and $0$ otherwise) under translucent \texttt{multiply} glazing ($\alpha = 0.50$, using $28$ steps, $10\%$ margin, width scale $0.022$, and hues restricted to $[28^\circ, 330^\circ]$ with $S(i) = 66 + (13i \bmod 18)\%$, $L=43\%$). Because each prime appears at most once, pixelwise saturation is avoided and the composition remains an organic ``all-over'' painting while retaining the pixel-level homomorphism on disjoint bit masks. For an $8$-character ASCII string such as \texttt{"MathArts"} ($64$ bits), only the first $64$ primes ($2 \dots 311$) are needed.
 
 \subsection{Organic Skein Registration and Log-Attenuation Linear Decoding}
-To make single-canvas decoding resilient to \emph{rotation, translation, and scaling} (RTS) as well as compression and noise—without adding external finder squares or corner dots—we integrate a single \emph{organic Pollock top-skein} $T_0$ (a deterministic drip trajectory in deep Venetian crimson \texttt{\#8b101c}, reserved outside the prime hue range $[28^\circ, 330^\circ]$) directly into the painting. During decoding:
+To make single-canvas decoding resilient to \emph{rotation, translation, and scaling} (RTS) as well as compression and noise—without adding external finder squares or corner dots—we paint a single \emph{organic Pollock top-skein} $T_0$ ($\mathrm{seed} = \texttt{0x20261124}$, $26$ steps, $12\%$ margin, width scale $0.028$) in opaque Venetian crimson ($C_{T_0} = \texttt{\#8b101c}$, reserved outside the prime hue range) on top of the glazed data strokes. During decoding:
 \begin{enumerate}
-  \item A chromatic response map isolates $T_0$ from the distorted canvas, and \emph{Fourier--Mellin (log-polar FFT) registration} recovers rotation and scale, followed by normalized Cartesian FFT cross-correlation and a full-resolution translation polish to warp the image back to the canonical $512 \times 512$ frame.
+  \item A soft chromatic response map $M(x,y) = \exp(-\|I(x,y) - C_{T_0}\|_2^2 / 30^2)$ isolates $T_0$ from the distorted canvas on a $0.25\times$ downsampled grid ($128 \times 128$ canonical).
+  \item \emph{Fourier--Mellin registration} resamples the high-pass FFT magnitude spectra onto a $180 \times 96$ log-polar grid ($\theta \in [0, \pi)$, $r \in [3, 0.45\min(H,W)]$) and applies phase correlation to estimate rotation and scale; both $\theta$ and $\theta + 180^\circ$ (with $\pm$ signs and reciprocal scale checks) are disambiguated and refined to $0.25^\circ$ and $0.5\%$ via normalized Cartesian FFT cross-correlation, followed by a full-resolution ($512 \times 512$) FFT translation polish within $\pm 24$~px.
   \item Masking out $T_0$, taking the negative logarithm of the normalized ground converts multiplicative glazing into an \emph{exact linear system} in log-attenuation space:
   \[
     L_{\mathrm{obs}}(x,y) := -\log\!\left(\frac{I_{\mathrm{aligned}}(x,y)}{I_{\mathrm{bg}}}\right) \approx \sum_{i=0}^{K-1} b_i\, L_i(x,y),
   \]
-  where $L_i$ is prime $p_i$'s log-attenuation vector on its stroke support. Solving the $K \times K$ regularized normal equations $\hat{\mathbf{b}} = (G + 10^{-3} I)^{-1} \mathbf{y}$ (where $G_{ij} = \langle L_i, L_j \rangle$) decouples overlapping strokes and recovers each bit via $\hat{b}_i \ge 0.5$.
+  where $L_i$ is prime $p_i$'s log-attenuation vector $-\log((1-\alpha) + \alpha C_{p_i})$ on its unoccluded stroke support $\operatorname{supp}(p_i) \setminus \operatorname{supp}(T_0)$. Solving the $K \times K$ regularized normal equations $\hat{\mathbf{b}} = (G + 10^{-3} I)^{-1} \mathbf{y}$ (where $G_{ij} = \langle L_i, L_j \rangle$ and $y_i = \langle L_i, L_{\mathrm{obs}} \rangle$) decouples overlapping strokes and recovers each bit via $\hat{b}_i \ge 0.5$.
 \end{enumerate}
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\textwidth]{figures/fig4_pollock_matharts_rts.pdf}
-  \caption{Single-canvas $64$-bit encoding of \texttt{"MathArts"} (primes $2 \dots 311$, $512 \times 512$, organic foundational pour): (a) canonical canvas; (b) rotated $143^\circ$, scaled $1.15\times$, shifted, and JPEG-compressed ($q=80$); (c) Fourier--Mellin aligned and decoded ($64/64$ bits); (d) rotated $-38^\circ$ with Gaussian noise ($\sigma=8$), decoded ($64/64$ bits).}
+  \caption{Single-canvas $64$-bit encoding of \texttt{"MathArts"} (primes $2 \dots 311$, $512 \times 512$, organic top-skein): (a) canonical canvas; (b) rotated $143^\circ$, scaled $1.15\times$, shifted, and JPEG-compressed ($q=80$); (c) Fourier--Mellin aligned and decoded ($64/64$ bits); (d) rotated $-38^\circ$ with Gaussian noise ($\sigma=8$), decoded ($64/64$ bits).}
   \label{fig:leonardo_rts}
 \end{figure}
 
@@ -201,7 +211,7 @@ Table~\ref{tab:rts} and Figure~\ref{fig:leonardo_rts} report our RTS stress-test
 \end{table}
 
 \section{Conclusion}
-Focusing on Jackson Pollock's drip-painting aesthetic demonstrates that visual number representations can bridge formal algebra and expressive art. While generative-grammar encodings prioritize clear, layered silhouettes, translucent \texttt{multiply} glazing and toroidal Fourier trajectory addition achieve true monoid homomorphisms $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ over all $a, b$. Extending translucent glazing to $64$ primes on a single $512 \times 512$ canvas with an integrated organic foundational pour turns a complete digital string (\texttt{"MathArts"}) into an all-over painting—free of any external registration dots—that remains $100\%$ decodable under rotation, scaling, translation, JPEG compression, and Gaussian noise. Interactive code and the broader multi-style comparison (including binary XOR-convolution, Klee watercolors, and Kandinsky \emph{Composition VIII}) are available at \url{https://github.com/leolca/prime_visual_algebra}.
+Focusing on Jackson Pollock's drip-painting aesthetic demonstrates that visual number representations can bridge formal algebra and expressive art. While generative-grammar encodings prioritize clear, layered silhouettes, translucent \texttt{multiply} glazing and toroidal Fourier trajectory addition achieve true monoid homomorphisms $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ over all $a, b$. Extending translucent glazing to $64$ primes on a single $512 \times 512$ canvas with an integrated organic top-skein turns a complete digital string (\texttt{"MathArts"}) into an all-over painting—free of any external registration dots—that remains $100\%$ decodable under rotation, scaling, translation, JPEG compression, and Gaussian noise. Interactive code and the broader multi-style comparison (including binary XOR-convolution, Klee watercolors, and Kandinsky \emph{Composition VIII}) are available at \url{https://github.com/leolca/prime_visual_algebra}.
 
 \bibliographystyle{tfapacite}
 \bibliography{references}

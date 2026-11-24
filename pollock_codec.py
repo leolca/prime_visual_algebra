@@ -1,25 +1,21 @@
 """
-Single-Canvas Pollock Visual Codec with Rotation, Translation, and Scale (RTS) Resilience.
-
-Encodes an arbitrary byte message (e.g., "Leonardo", 64 bits) onto ONE 512x512
-Pollock canvas by mapping bit i -> prime p_i using translucent multiply glazing,
-with 3 disguised asymmetric paint-pool fiducials for RTS alignment.
+Single-Canvas Pollock Visual Codec with Integrated Organic Underpainting Alignment
+(No external fiducial dots — uses an organic Pollock base pour + Fourier-Mellin RTS alignment).
 """
 
 from __future__ import annotations
 import io
 import math
-from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 import numpy as np
 from PIL import Image, ImageDraw
 
 from algebra import primes_up_to
 from verify_decomposition import hex_to_rgb, hsl_to_rgb, mulberry32
 
-# Reserve hues in [20, 330] for primes; reserve pure crimson (#a80818) for the 3 anchor pools
-ANCHOR_HEX = "#a80818"
-ANCHOR_RGB = np.array(hex_to_rgb(ANCHOR_HEX), dtype=np.float32)
+# Foundational organic Pollock pour color (deep Venetian umber-crimson, integrated into the painting)
+BASE_POUR_HEX = "#6e171e"
+BASE_POUR_RGB = np.array(hex_to_rgb(BASE_POUR_HEX), dtype=np.float32)
 BG_HEX = "#f4efe6"
 BG_RGB = np.array(hex_to_rgb(BG_HEX), dtype=np.float32)
 
@@ -34,22 +30,19 @@ def get_first_k_primes(k: int) -> List[int]:
 
 
 def prime_color_pollock(idx: int) -> Tuple[int, int, int]:
-    # Keep hue away from 345..15 deg (reserved for crimson anchor pools)
-    hue = 25.0 + ((idx * 137.508) % 305.0)
-    sat = 68.0 + ((idx * 13) % 18)
-    light = 42.0
+    # Keep hue away from 340..20 deg (reserved for the foundational Venetian umber-crimson pour)
+    hue = 28.0 + ((idx * 137.508) % 302.0)
+    sat = 66.0 + ((idx * 13) % 18)
+    light = 43.0
     return hsl_to_rgb(hue, sat, light)
 
 
-def render_prime_stroke_mask(p: int, idx: int, size: int = 512, steps: int = 28) -> Tuple[np.ndarray, np.ndarray]:
-    """Return (rgb_u8, boolean_mask) for prime p's single Pollock drip trajectory."""
-    seed = ((p * 2654435761) ^ 0x40503311) & 0xFFFFFFFF
-    rand = mulberry32(seed)
-    color = prime_color_pollock(idx)
-
+def render_stroke_mask(seed: int, size: int = 512, steps: int = 28, margin_frac: float = 0.10, lw_scale: float = 0.022) -> np.ndarray:
+    """Return boolean mask of an organic Pollock drip trajectory."""
+    rand = mulberry32(seed & 0xFFFFFFFF)
     img = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(img)
-    margin = size * 0.12
+    margin = size * margin_frac
     span = size - 2 * margin
     x = margin + rand() * span
     y = margin + rand() * span
@@ -69,7 +62,7 @@ def render_prime_stroke_mask(p: int, idx: int, size: int = 512, steps: int = 28)
             ny = max(margin, min(size - margin, ny))
         cx = (x + nx) / 2 + (rand() - 0.5) * speed * 0.45
         cy = (y + ny) / 2 + (rand() - 0.5) * speed * 0.45
-        lw = max(2, int(round((1.15 - speed / (size * 0.18)) * size * 0.022)))
+        lw = max(2, int(round((1.15 - speed / (size * 0.18)) * size * lw_scale)))
         draw.line([(x, y), (cx, cy), (nx, ny)], fill=255, width=lw)
         if rand() < 0.35:
             rr = lw * (0.6 + rand() * 0.9)
@@ -78,22 +71,23 @@ def render_prime_stroke_mask(p: int, idx: int, size: int = 512, steps: int = 28)
             draw.ellipse([ox - rr, oy - rr, ox + rr, oy + rr], fill=255)
         x, y = nx, ny
 
-    mask = np.array(img) > 0
-    rgb = np.array(color, dtype=np.uint8)
+    return np.array(img) > 0
+
+
+def render_prime_stroke_mask(p: int, idx: int, size: int = 512, steps: int = 28) -> Tuple[np.ndarray, np.ndarray]:
+    seed = ((p * 2654435761) ^ 0x40503311) & 0xFFFFFFFF
+    mask = render_stroke_mask(seed, size=size, steps=steps, margin_frac=0.10, lw_scale=0.022)
+    rgb = np.array(prime_color_pollock(idx), dtype=np.uint8)
     return rgb, mask
 
 
-def canonical_anchors(size: int) -> List[Tuple[float, float, float]]:
-    """Three asymmetric anchor paint pools: (x, y, radius) sorted largest to smallest."""
-    return [
-        (size * 0.07, size * 0.07, size * 0.024),
-        (size * 0.93, size * 0.07, size * 0.017),
-        (size * 0.07, size * 0.93, size * 0.011),
-    ]
+def render_base_pour_mask(size: int = 512) -> np.ndarray:
+    """Organic foundational Pollock pour used for both aesthetics and RTS registration."""
+    return render_stroke_mask(seed=0x20261124, size=size, steps=26, margin_frac=0.12, lw_scale=0.028)
 
 
-def encode_message_pollock(message: str, size: int = 512, alpha: float = 0.55) -> Tuple[Image.Image, List[int]]:
-    """Encode an ASCII/UTF-8 string onto a single Pollock canvas using multiply glazing."""
+def encode_message_pollock(message: str, size: int = 512, alpha: float = 0.52) -> Tuple[Image.Image, List[int]]:
+    """Encode an ASCII/UTF-8 string onto a single Pollock canvas with an organic base pour."""
     raw = message.encode("utf-8")
     bits: List[int] = []
     for byte in raw:
@@ -103,18 +97,20 @@ def encode_message_pollock(message: str, size: int = 512, alpha: float = 0.55) -
     primes = get_first_k_primes(len(bits))
     canvas = np.broadcast_to(BG_RGB, (size, size, 3)).copy()
 
+    # 1. Paint data prime strokes via multiply glazing
     for idx, (bit, p) in enumerate(zip(bits, primes)):
         if bit == 1:
             rgb, mask = render_prime_stroke_mask(p, idx, size=size)
             col = rgb.astype(np.float32) / 255.0
             canvas[mask] *= (1.0 - alpha) + alpha * col
 
+    # 2. Paint the organic foundational pour (integrated inside the painting, no external dots)
+    base_mask = render_base_pour_mask(size=size)
+    base_col = BASE_POUR_RGB / 255.0
+    base_alpha = 0.82
+    canvas[base_mask] *= (1.0 - base_alpha) + base_alpha * base_col
+
     img = Image.fromarray(np.clip(np.round(canvas), 0, 255).astype(np.uint8))
-    # Paint the 3 disguised anchor paint pools on top so they remain clearly detectable
-    draw = ImageDraw.Draw(img)
-    ac = tuple(int(v) for v in ANCHOR_RGB)
-    for ax, ay, ar in canonical_anchors(size):
-        draw.ellipse([ax - ar, ay - ar, ax + ar, ay + ar], fill=ac)
     return img, bits
 
 
@@ -130,17 +126,14 @@ def apply_rts_distortion(
     """Apply Rotation, Translation, Scaling, optional Gaussian noise, and JPEG compression."""
     w, h = img.size
     bg_tuple = tuple(int(v) for v in BG_RGB)
-    # Create a slightly larger padded canvas so rotated/scaled corners don't clip
     pad = int(w * 0.25)
     big = Image.new("RGB", (w + 2 * pad, h + 2 * pad), bg_tuple)
     big.paste(img, (pad, pad))
 
-    # Scale around center, rotate, then translate
     new_w, new_h = int(round(big.width * scale)), int(round(big.height * scale))
     scaled = big.resize((new_w, new_h), Image.Resampling.BILINEAR)
     rotated = scaled.rotate(angle_deg, resample=Image.Resampling.BILINEAR, fillcolor=bg_tuple)
 
-    # Crop back to (w + 2*pad) centered + shift
     cx, cy = rotated.width / 2 - shift[0], rotated.height / 2 - shift[1]
     left = int(round(cx - (w + 2 * pad) / 2))
     top = int(round(cy - (h + 2 * pad) / 2))
@@ -160,83 +153,211 @@ def apply_rts_distortion(
     return out
 
 
-def detect_three_anchors(arr: np.ndarray) -> List[Tuple[float, float]]:
-    """Detect the 3 largest crimson anchor blobs and return centroids sorted by area descending."""
-    # Red-dominant score: high R, low G and B
-    r, g, b = arr[:, :, 0].astype(np.float32), arr[:, :, 1].astype(np.float32), arr[:, :, 2].astype(np.float32)
-    dist = np.sqrt((r - ANCHOR_RGB[0]) ** 2 + (g - ANCHOR_RGB[1]) ** 2 + (b - ANCHOR_RGB[2]) ** 2)
-    mask = dist < 55.0
-
-    # Simple 4-connected component labeling via BFS
-    h, w = mask.shape
-    visited = np.zeros_like(mask, dtype=bool)
-    comps: List[Tuple[int, float, float]] = []
-    ys, xs = np.where(mask)
-    for sy, sx in zip(ys, xs):
-        if visited[sy, sx]:
-            continue
-        stack = [(int(sy), int(sx))]
-        visited[sy, sx] = True
-        pts = []
-        while stack:
-            cy, cx = stack.pop()
-            pts.append((cx, cy))
-            for ny, nx in ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)):
-                if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not visited[ny, nx]:
-                    visited[ny, nx] = True
-                    stack.append((ny, nx))
-        if len(pts) >= 12:
-            mx = sum(p[0] for p in pts) / len(pts)
-            my = sum(p[1] for p in pts) / len(pts)
-            comps.append((len(pts), mx, my))
-
-    comps.sort(key=lambda c: c[0], reverse=True)
-    if len(comps) < 3:
-        raise RuntimeError(f"Expected 3 anchor blobs, found {len(comps)}")
-    return [(c[1], c[2]) for c in comps[:3]]
+def extract_base_pour_score(arr: np.ndarray) -> np.ndarray:
+    """Extract soft response map for the foundational Venetian umber-crimson pour."""
+    # Expected RGB of the base pour on the linen ground
+    target = BG_RGB * ((1.0 - 0.82) + 0.82 * (BASE_POUR_RGB / 255.0))
+    diff = arr.astype(np.float32) - target
+    dist = np.sqrt(np.sum(diff ** 2, axis=2))
+    # Also respond if darkened further by overlapping prime glazes (low G, low B, dark R)
+    score = np.exp(-(dist / 38.0) ** 2)
+    return score.astype(np.float32)
 
 
-def align_image_rts(distorted: Image.Image, target_size: int = 512) -> Image.Image:
-    """Recover similarity transform from 3 anchor centroids and warp back to canonical frame."""
-    arr = np.array(distorted)
-    src_pts = detect_three_anchors(arr)  # [(x, y), ...] sorted largest to smallest
-    dst_pts = [(ax, ay) for ax, ay, _ in canonical_anchors(target_size)]
+def logpolar_fft_register(ref: np.ndarray, mov: np.ndarray) -> Tuple[float, float, float, float]:
+    """
+    Recover (angle_deg, scale, dx, dy) mapping ref -> mov using Fourier-Mellin (log-polar FFT)
+    followed by coarse-to-fine local refinement.
+    """
+    H, W = mov.shape
+    # Pad ref to (H, W) centered
+    rh, rw = ref.shape
+    ref_pad = np.zeros((H, W), dtype=np.float32)
+    y0, x0 = (H - rh) // 2, (W - rw) // 2
+    ref_pad[y0:y0 + rh, x0:x0 + rw] = ref
 
-    # Solve for affine/similarity matrix mapping dst (output) -> src (input) for PIL.Image.transform
-    # src_x = a * dst_x + b * dst_y + c
-    # src_y = d * dst_x + e * dst_y + f
-    A = np.array([[x, y, 1.0] for x, y in dst_pts], dtype=np.float64)
-    bx = np.array([x for x, _ in src_pts], dtype=np.float64)
-    by = np.array([y for _, y in src_pts], dtype=np.float64)
-    px = np.linalg.solve(A, bx)
-    py = np.linalg.solve(A, by)
-    coeffs = (px[0], px[1], px[2], py[0], py[1], py[2])
-    return distorted.transform((target_size, target_size), Image.Transform.AFFINE, coeffs, resample=Image.Resampling.BILINEAR)
+    # 1. FFT magnitude spectra (translation invariant!)
+    f_ref = np.abs(np.fft.fftshift(np.fft.fft2(ref_pad)))
+    f_mov = np.abs(np.fft.fftshift(np.fft.fft2(mov)))
+
+    # Suppress DC & apply high-pass emphasis
+    cy, cx = H // 2, W // 2
+    yy, xx = np.ogrid[:H, :W]
+    rad = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
+    hp = np.clip(rad / 8.0, 0.0, 1.0)
+    f_ref *= hp
+    f_mov *= hp
+
+    # 2. Resample magnitudes onto log-polar grid (N_ang x N_rad)
+    N_ang, N_rad = 180, 96
+    r_min, r_max = 3.0, min(H, W) * 0.45
+    thetas = np.linspace(0.0, math.pi, N_ang, endpoint=False)  # 180-deg symmetry of real FFT mag
+    log_rs = np.linspace(math.log(r_min), math.log(r_max), N_rad)
+    rs = np.exp(log_rs)
+    grid_y = cy + np.outer(np.sin(thetas), rs)
+    grid_x = cx + np.outer(np.cos(thetas), rs)
+
+    def sample_bilinear(img_arr: np.ndarray, gy: np.ndarray, gx: np.ndarray) -> np.ndarray:
+        y0i = np.clip(np.floor(gy).astype(int), 0, H - 2)
+        x0i = np.clip(np.floor(gx).astype(int), 0, W - 2)
+        wy = gy - y0i
+        wx = gx - x0i
+        return (
+            img_arr[y0i, x0i] * (1 - wy) * (1 - wx)
+            + img_arr[y0i, x0i + 1] * (1 - wy) * wx
+            + img_arr[y0i + 1, x0i] * wy * (1 - wx)
+            + img_arr[y0i + 1, x0i + 1] * wy * wx
+        )
+
+    lp_ref = sample_bilinear(f_ref, grid_y, grid_x)
+    lp_mov = sample_bilinear(f_mov, grid_y, grid_x)
+
+    # 3. Phase correlation in log-polar space gives (d_theta, d_log_r)
+    F1 = np.fft.fft2(lp_ref)
+    F2 = np.fft.fft2(lp_mov)
+    R = F1 * np.conj(F2)
+    R /= np.maximum(np.abs(R), 1e-8)
+    corr_lp = np.real(np.fft.ifft2(R))
+
+    # Restrict scale search to reasonable [0.65, 1.5]
+    max_shift_r = int(round(math.log(1.55) / (log_rs[1] - log_rs[0])))
+    best_val = -1.0
+    best_ia, best_ir = 0, 0
+    for ir in list(range(0, max_shift_r + 1)) + list(range(N_rad - max_shift_r, N_rad)):
+        col = corr_lp[:, ir]
+        ia = int(np.argmax(col))
+        if col[ia] > best_val:
+            best_val = float(col[ia])
+            best_ia, best_ir = ia, ir
+
+    # Convert index shifts to angle & scale (note 180-deg ambiguity resolved below)
+    # In image coords (y downward), CCW rotation by +ang shifts theta by -ang;
+    # phase correlation R = F1 * conj(F2) gives shift = ref_idx - mov_idx.
+    shift_ia = best_ia if best_ia <= N_ang // 2 else best_ia - N_ang
+    shift_ir = best_ir if best_ir <= N_rad // 2 else best_ir - N_rad
+    d_ang = shift_ia * (180.0 / N_ang)
+    d_lr = shift_ir * (log_rs[1] - log_rs[0])
+    est_scale = math.exp(-d_lr)
+
+    # 4. Test both d_ang and d_ang + 180 (and +/- signs) via Cartesian FFT cross-correlation
+    ref_img = Image.fromarray((ref * 255).astype(np.uint8))
+    best_score = -1.0
+    best_params = (0.0, 1.0, 0.0, 0.0)
+    F_mov = np.fft.fft2(mov)
+
+    def eval_candidate(ang: float, sc: float) -> Tuple[float, float, float]:
+        nw, nh = max(8, int(round(rw * sc))), max(8, int(round(rh * sc)))
+        r_sc = ref_img.resize((nw, nh), Image.Resampling.BILINEAR)
+        r_rot = r_sc.rotate(ang, expand=True, resample=Image.Resampling.BILINEAR)
+        tpl = np.zeros((H, W), dtype=np.float32)
+        r_arr = np.array(r_rot, dtype=np.float32) / 255.0
+        # Center-crop if r_rot exceeds (H, W) so its center stays exact
+        sy0 = max(0, (r_rot.height - H) // 2)
+        sx0 = max(0, (r_rot.width - W) // 2)
+        th = min(H, r_rot.height)
+        tw = min(W, r_rot.width)
+        r_crop = r_arr[sy0:sy0 + th, sx0:sx0 + tw]
+        tpl[:th, :tw] = r_crop
+        norm_tpl = float(np.sqrt(np.sum(r_crop ** 2))) + 1e-6
+        cc = np.real(np.fft.ifft2(F_mov * np.conj(np.fft.fft2(tpl))))
+        iy, ix = np.unravel_index(np.argmax(cc), cc.shape)
+        dy = float(iy if iy <= H // 2 else iy - H)
+        dx = float(ix if ix <= W // 2 else ix - W)
+        # Normalized cross-correlation score avoids bias toward larger scales
+        return float(cc[iy, ix]) / norm_tpl, dx + (tw - W) / 2.0, dy + (th - H) / 2.0
+
+    cand_angles = {d_ang, d_ang + 180.0, -d_ang, -d_ang + 180.0}
+    cand_scales = {est_scale, 1.0 / max(est_scale, 0.1)}
+    for base_ang in cand_angles:
+        for base_sc in cand_scales:
+            if not (0.55 <= base_sc <= 1.75):
+                continue
+            for da in (-2.0, 0.0, 2.0):
+                for ds in (0.97, 1.0, 1.03):
+                    sc_val, dx, dy = eval_candidate(base_ang + da, base_sc * ds)
+                    if sc_val > best_score:
+                        best_score = sc_val
+                        best_params = (base_ang + da, base_sc * ds, dx, dy)
+
+    # Fine 0.25-deg / 0.5% polish around best_params
+    b_ang, b_sc, _, _ = best_params
+    for da in (-1.0, -0.5, -0.25, 0.0, 0.25, 0.5, 1.0):
+        for ds in (0.985, 0.992, 1.0, 1.008, 1.015):
+            sc_val, dx, dy = eval_candidate(b_ang + da, b_sc * ds)
+            if sc_val > best_score:
+                best_score = sc_val
+                best_params = (b_ang + da, b_sc * ds, dx, dy)
+
+    return best_params
 
 
-def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha: float = 0.55) -> Tuple[str, List[int]]:
+def align_image_organic(distorted: Image.Image, target_size: int = 512) -> Image.Image:
+    """Align distorted canvas back to canonical frame using the organic base pour."""
+    work_scale = 0.25  # 128x128 for fast Fourier-Mellin registration
+    ref_mask = render_base_pour_mask(size=target_size)
+    ref_small = np.array(
+        Image.fromarray((ref_mask * 255).astype(np.uint8)).resize(
+            (int(target_size * work_scale), int(target_size * work_scale)),
+            Image.Resampling.BILINEAR,
+        ),
+        dtype=np.float32,
+    ) / 255.0
+
+    mov_w = int(round(distorted.width * work_scale))
+    mov_h = int(round(distorted.height * work_scale))
+    mov_small_img = distorted.resize((mov_w, mov_h), Image.Resampling.BILINEAR)
+    mov_small = extract_base_pour_score(np.array(mov_small_img))
+
+    ang, sc, dx_s, dy_s = logpolar_fft_register(ref_small, mov_small)
+    dx = dx_s / work_scale
+    dy = dy_s / work_scale
+
+    # One full-res (512x512) translation polish using FFT cross-correlation
+    rad = math.radians(ang)
+    cos_a, sin_a = math.cos(rad), math.sin(rad)
+    cx_src = distorted.width / 2.0 + dx
+    cy_src = distorted.height / 2.0 + dy
+    cx_dst = target_size / 2.0
+    cy_dst = target_size / 2.0
+    a, b = sc * cos_a, sc * sin_a
+    c = cx_src - (a * cx_dst + b * cy_dst)
+    d, e = -sc * sin_a, sc * cos_a
+    f = cy_src - (d * cx_dst + e * cy_dst)
+    coarse = distorted.transform((target_size, target_size), Image.Transform.AFFINE, (a, b, c, d, e, f), resample=Image.Resampling.BILINEAR)
+
+    coarse_score = extract_base_pour_score(np.array(coarse))
+    cc_full = np.real(np.fft.ifft2(np.fft.fft2(coarse_score) * np.conj(np.fft.fft2(ref_mask.astype(np.float32)))))
+    iy, ix = np.unravel_index(np.argmax(cc_full), cc_full.shape)
+    fy = float(iy if iy <= target_size // 2 else iy - target_size)
+    fx = float(ix if ix <= target_size // 2 else ix - target_size)
+    if abs(fx) <= 24 and abs(fy) <= 24:
+        coarse = coarse.transform((target_size, target_size), Image.Transform.AFFINE, (1, 0, fx, 0, 1, fy), resample=Image.Resampling.BILINEAR)
+    return coarse
+
+
+def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha: float = 0.52) -> Tuple[str, List[int]]:
     """Decode n_bits from an aligned Pollock canvas using soft matched-filter scoring."""
-    aligned = align_image_rts(img, target_size=size)
+    aligned = align_image_organic(img, target_size=size)
     arr = np.array(aligned, dtype=np.float32)
     residual = np.clip(arr / BG_RGB, 0.0, 1.0)
+
+    # Mask out the foundational pour pixels so they don't bias data bit scores
+    base_mask = render_base_pour_mask(size=size)
 
     primes = get_first_k_primes(n_bits)
     rec_bits: List[int] = []
     for idx, p in enumerate(primes):
         rgb, mask = render_prime_stroke_mask(p, idx, size=size)
+        valid_mask = mask & (~base_mask)
+        if not np.any(valid_mask):
+            valid_mask = mask
         col = rgb.astype(np.float32) / 255.0
-        expected_att = (1.0 - alpha) + alpha * col  # 3-vector in (0, 1]
+        expected_att = (1.0 - alpha) + alpha * col
 
-        # For a pixel where prime p is painted (even if overlapped by other primes),
-        # residual <= expected_att (with slight tolerance for bilinear resampling/noise).
-        # Specifically, compute fraction of mask pixels matching residual <= expected_att + tol
-        # AND having significant darkening (distance from white paper).
-        pix_res = residual[mask]
-        # Soft check: how many pixels in this prime's footprint are at least 85% as dark as expected_att?
-        match_frac = float(np.mean(np.all(pix_res <= expected_att + 0.08, axis=1)))
-        rec_bits.append(1 if match_frac >= 0.72 else 0)
+        pix_res = residual[valid_mask]
+        match_frac = float(np.mean(np.all(pix_res <= expected_att + 0.10, axis=1)))
+        rec_bits.append(1 if match_frac >= 0.68 else 0)
 
-    # Convert bits back to UTF-8 bytes
     out_bytes = bytearray()
     for i in range(0, len(rec_bits), 8):
         val = 0
@@ -248,8 +369,8 @@ def decode_message_pollock(img: Image.Image, n_bits: int, size: int = 512, alpha
 
 if __name__ == "__main__":
     msg = "Leonardo"
-    canvas_img, true_bits = encode_message_pollock(msg, size=512, alpha=0.55)
-    print(f"Encoded '{msg}' ({len(true_bits)} bits, primes 2..{get_first_k_primes(len(true_bits))[-1]}) on 1 canvas (512x512).")
+    canvas_img, true_bits = encode_message_pollock(msg, size=512, alpha=0.52)
+    print(f"Encoded '{msg}' ({len(true_bits)} bits, primes 2..{get_first_k_primes(len(true_bits))[-1]}) on 1 canvas (512x512, organic base pour).")
 
     scenarios = [
         ("Clean canonical", dict(angle_deg=0.0, scale=1.0, shift=(0, 0), noise_std=0.0, jpeg_quality=None)),
@@ -260,6 +381,6 @@ if __name__ == "__main__":
 
     for label, kw in scenarios:
         distorted = apply_rts_distortion(canvas_img, **kw)
-        rec_msg, rec_bits = decode_message_pollock(distorted, len(true_bits), size=512, alpha=0.55)
+        rec_msg, rec_bits = decode_message_pollock(distorted, len(true_bits), size=512, alpha=0.52)
         bit_acc = sum(t == r for t, r in zip(true_bits, rec_bits))
         print(f"  [{label}] -> '{rec_msg}' | bits: {bit_acc}/{len(true_bits)}")

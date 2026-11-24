@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from algebra import factorize, primes_up_to
-from pollock_codec import apply_rts_distortion, align_image_rts, encode_message_pollock
+from pollock_codec import align_image_organic, apply_rts_distortion, encode_message_pollock
 from verify_decomposition import hex_to_rgb, hsl_to_rgb, mulberry32, render_pollock_layer
 
 FIG_DIR = Path(__file__).resolve().parent / "figures"
@@ -164,15 +164,15 @@ def fig3_pollock_peeling() -> None:
 
 
 def fig4_pollock_leonardo_rts() -> None:
-    img, _ = encode_message_pollock("Leonardo", size=512, alpha=0.55)
+    img, _ = encode_message_pollock("Leonardo", size=512, alpha=0.52)
     d1 = apply_rts_distortion(img, angle_deg=143.0, scale=1.15, shift=(-22, 15), jpeg_quality=80)
-    a1 = align_image_rts(d1, target_size=512)
+    a1 = align_image_organic(d1, target_size=512)
     d2 = apply_rts_distortion(img, angle_deg=-38.0, scale=0.95, shift=(10, 12), noise_std=8.0, seed=1)
 
     panels = [
         (img, "(a) Canonical 64-bit Canvas\n(\"Leonardo\", primes 2..311)"),
         (d1, "(b) Rotated $143^\\circ$, $1.15\\times$,\nShifted, JPEG $q=80$"),
-        (a1, "(c) Anchor-Aligned (b)\nDecoded: \"Leonardo\" (64/64 bits)"),
+        (a1, "(c) Fourier--Mellin Aligned (b)\nDecoded: \"Leonardo\" (64/64 bits)"),
         (d2, "(d) Rotated $-38^\\circ$, Noise $\\sigma=8$\nDecoded: \"Leonardo\" (64/64 bits)"),
     ]
     fig, axes = plt.subplots(1, 4, figsize=(11.0, 3.0))

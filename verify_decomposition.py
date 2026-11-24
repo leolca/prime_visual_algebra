@@ -846,7 +846,50 @@ def test_uniqueness_and_peeling(mode: str, max_n: int = 120, size: int = 100) ->
             if errors <= 5:
                 print(f"  Mismatch for n={n}: true={factorize(n)}, recovered={recovered}")
 
-    print(f"[{mode}] Blind peeling decomposition: {max_n - errors}/{max_n} exact ({errors} errors)")
+    print(f"[kandinsky] Blind peeling decomposition: {max_n - errors}/{max_n} exact ({errors} errors)")
+
+
+def test_pollock_extent_peeling(max_n: int = 120, size: int = 100) -> None:
+    """Verify uniqueness and blind top-down peeling for Pollock Path Extent (steps = 32 * e)."""
+    bg = np.array(hex_to_rgb("#f4efe6"), dtype=np.uint8)
+    candidates: List[Tuple[int, int, np.ndarray, np.ndarray]] = []
+    for p in PRIMES:
+        max_exp = int(math.floor(math.log(max_n, p)))
+        for e in range(1, max_exp + 1):
+            rgb, mask = render_pollock_layer(p, 1, size=size, steps=32 * e)
+            candidates.append((p, e, rgb, mask))
+    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+
+    rendered: Dict[int, np.ndarray] = {}
+    hashes: Dict[bytes, List[int]] = {}
+    for n in range(1, max_n + 1):
+        canvas = np.broadcast_to(bg, (size, size, 3)).copy()
+        facs = factorize(n)
+        for p in sorted(facs.keys()):
+            rgb, mask = render_pollock_layer(p, 1, size=size, steps=32 * facs[p])
+            canvas[mask] = rgb[mask]
+        rendered[n] = canvas
+        hashes.setdefault(canvas.tobytes(), []).append(n)
+
+    errors = 0
+    for n in range(1, max_n + 1):
+        img = rendered[n]
+        known_occluded = np.zeros((size, size), dtype=bool)
+        recovered: Dict[int, int] = {}
+        for p, e, rgb, mask in candidates:
+            if p in recovered:
+                continue
+            visible_mask = mask & (~known_occluded)
+            if not np.any(visible_mask):
+                continue
+            if np.array_equal(img[visible_mask], rgb[visible_mask]):
+                recovered[p] = e
+                known_occluded |= mask
+        if recovered != factorize(n):
+            errors += 1
+
+    print(f"[pollock_extent] Unique images: {len(hashes)}/{max_n}")
+    print(f"[pollock_extent] Blind peeling decomposition: {max_n - errors}/{max_n} exact ({errors} errors)")
 
 
 def decompose_xor_tile(
@@ -951,6 +994,7 @@ if __name__ == "__main__":
 
     # 2. Painterly modes (Pollock, Klee, Kandinsky)
     test_uniqueness_and_peeling("pollock", 120, 100)
+    test_pollock_extent_peeling(120, 100)
     test_pollock_glaze_homomorphism(120, 100)
     test_pollock_trajectory_homomorphism(120, 100)
     test_klee_uniqueness_and_peeling(120, 100)

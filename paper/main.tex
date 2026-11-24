@@ -40,7 +40,7 @@
 \maketitle
 
 \begin{abstract}
-Integer factorization and the Fundamental Theorem of Arithmetic underpin modern number theory, cryptography, and error-correcting codes, yet visual representations of factorization typically require knowing a number's prime factors in advance before arranging motifs side by side. Drawing on Jackson Pollock's ``all-over'' drip-painting aesthetic and the program of aesthetic computing, we develop a family of prime-factor visual representations in which each prime $p$ seeds a deterministic, velocity-coupled drip trajectory in a distinct hue. We contrast two generative-grammar encodings (\emph{separate strokes} and prefix-preserving \emph{path extent}) with two true homomorphisms $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$: \emph{translucent \texttt{multiply} glazing} (a pixel-level commutative monoid homomorphism for all $a, b$) and \emph{toroidal Fourier trajectory addition} (a vector-space homomorphism on $[0,1)^2$). Across $1 \le n \le 120$, all four Pollock variants achieve $120/120$ image uniqueness and $120/120$ exact blind factor recovery from raw raster bitmaps. Finally, we extend the translucent-glaze model to encode an entire $64$-bit message (\texttt{"MathArts"}) onto a single unified $512 \times 512$ Pollock canvas using the first $64$ primes ($2 \dots 311$) and an integrated organic foundational pour for Fourier--Mellin registration, achieving $64/64$ bit recovery under arbitrary rotation, translation, scaling, JPEG compression ($q=80$), and Gaussian noise ($\sigma = 8$).
+Integer factorization and the Fundamental Theorem of Arithmetic underpin modern number theory, cryptography, and error-correcting codes, yet visual representations of factorization typically require knowing a number's prime factors in advance before arranging motifs side by side. Drawing on Jackson Pollock's ``all-over'' drip-painting aesthetic and the program of aesthetic computing, we develop a family of prime-factor visual representations in which each prime $p$ seeds a deterministic, velocity-coupled drip trajectory in a distinct hue. We contrast two generative-grammar encodings (\emph{Separate Strokes} and prefix-preserving \emph{Path Extent}) with two true homomorphisms $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$: \emph{Translucent Multiply Glazing} (TMG, a pixel-level commutative monoid homomorphism for all $a, b$) and \emph{Toroidal Trajectory Sum} (TTS, a vector-space homomorphism on $[0,1)^2$). Across $1 \le n \le 120$, all four Pollock variants achieve $120/120$ image uniqueness and $120/120$ exact blind factor recovery from raw raster bitmaps. Finally, we extend TMG to encode an entire $64$-bit message (\texttt{"MathArts"}) onto a single unified $512 \times 512$ Pollock canvas using the first $64$ primes ($2 \dots 311$) and an integrated organic top-skein for Fourier--Mellin registration, achieving $64/64$ bit recovery under arbitrary rotation, translation, scaling, JPEG compression ($q=80$), and Gaussian noise ($\sigma = 8$).
 \end{abstract}
 
 \begin{keywords}
@@ -48,30 +48,52 @@ mathematical art; Jackson Pollock; prime factorization; aesthetic computing; vis
 \end{keywords}
 
 \section{Introduction}
-Although we encounter positive integers early in life through counting, labeling, and measurement, numbers themselves are abstract entities independent of any single notation \citep{menninger1969number,reimann2024visual}. Societies have historically adopted different positional bases for practical reasons \citep{ifrah2000universal,menninger1969number}: \emph{base 10} (decimal) reflects anatomical finger counting; \emph{base 12} (duodecimal, preserved in dozens and clock faces) offers convenient divisibility by $2, 3, 4$, and $6$; and \emph{base 60} (sexagesimal, inherited from Babylonian astronomy and still used for minutes, seconds, and angular degrees) maximizes small-integer divisors. Yet all positional bases—including binary base $2$—are optimized for addition and magnitude comparison rather than multiplicative structure: in base $10$, consecutive numerals such as $14$ and $15$ conceal that $14 = 2 \times 7$ and $15 = 3 \times 5$.
+Although positive integers are abstract entities independent of any single notation \citep{menninger1969number,reimann2024visual}, positional bases such as decimal, duodecimal, and sexagesimal \citep{ifrah2000universal,menninger1969number}—as well as binary base $2$—are optimized for addition and magnitude comparison rather than multiplicative structure: in base $10$, consecutive numerals such as $14$ and $15$ conceal that $14 = 2 \times 7$ and $15 = 3 \times 5$.
 
 Representing integers directly through \emph{prime factorization} reveals that hidden structure—fulfilling what \citet{arcavi2003role} describes as visualization's role in ``seeing the unseen'' within abstract mathematical objects, extending \citeauthor{giaquinto2007visual}'s \citeyearpar{giaquinto2007visual} account of visual thinking in arithmetic, and echoing \citet{harriss2022art} in viewing mathematical illustration as an inherently artistic mapping from abstract structure into perceptual form. By the \emph{Fundamental Theorem of Arithmetic}, every integer $n > 1$ admits a decomposition into prime numbers that is unique up to the ordering of factors:
 \[
   n = \prod_{i=1}^{r} p_i^{e_i},
 \]
-where $p_1 < p_2 < \dots < p_r$ are distinct primes and $e_i \ge 1$ are their multiplicities (with $n = 1$ serving as the empty product, or multiplicative identity). Integer factorization and the Fundamental Theorem of Arithmetic have long been of central interest across mathematics, computer science, and engineering—from pure number theory to cryptography and algebraic coding \citep{lidl1997finite}—because multiplication is computationally easy while recovering prime factors is hard.
+where $p_1 < p_2 < \dots < p_r$ are distinct primes and $e_i \ge 1$ are their multiplicities (with $n = 1$ serving as the empty product, or multiplicative identity). Integer factorization and the Fundamental Theorem of Arithmetic are central across number theory, cryptography, and algebraic coding \citep{hardy2008introduction} because multiplication is computationally easy while recovering prime factors is hard.
 
 Visual symbols have likewise long been used to encode structured information—from maritime signal flags and Morse code's dots and dashes to linear barcodes and QR pixel matrices. While modern machine codes are engineered for efficiency and unambiguous decoding, they rarely aspire to aesthetic beauty. Yet history and literature offer striking counterexamples where information encoding and visual art are inseparable: Egyptian hieroglyphs, East Asian kanji calligraphy, and Arthur Conan Doyle's \emph{The Adventure of the Dancing Men}, where stick-figure postures serve simultaneously as a substitution cipher and a decorative frieze. In the philosophy of art, \citet{goodman1968languages} formalizes this duality by showing that pictures and notations operate as \emph{symbol systems} governed by syntactic and semantic rules rather than mere resemblance. Standing at the intersection of mathematics and the arts \citep{emmer1993visual,bill1993mathematical}—and echoing the program of \emph{aesthetic computing} \citep{fishwick2006aesthetic}, which brings artistic theory and culturally specific styles into formal \emph{notational spaces}—we aim for visual number representations that are simultaneously \emph{efficiently composable and recoverable} like a code, yet \emph{aesthetically compelling} as visual art.
 
 In \emph{Prime concerns: painting number patterns}, \citet{ashwell2020prime} assigns distinct visual marks to primes and depicts composites by placing those marks side by side. Related visual traditions—including Huff's 3D ``genetic'' prime-factor sculptures \citep{huff2006visually}, Yorgey's recursive \emph{Factorization Diagrams} \citep{yorgey2012factorization}, Reimann's geometric integer patterns \citep{reimann2024visual}, the color-segmented wheels of \emph{Prime Climb}, and Ba\c{s}e\u{g}mez's dihedral rosette pictographs \citep{basegmez2026symmetries}—share a common workflow: one first factors $n$ arithmetically and then arranges symbols according to that factorization. In computational neuroscience, \citet{kleyko2022integer} take a complementary algebraic step using Vector Symbolic Architectures, binding prime hypervectors so that multiplication becomes compositional binding and factorization becomes resonator-network unbinding. Here we bring that same compositional principle into 2D visual art—focusing on Jackson Pollock's drip-painting idiom (c.\ 1947--1950)—and ask two deeper questions: (1) when can visual composition itself act as a true homomorphism $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$? and (2) can a single unified Pollock painting reliably store and recover a multi-byte digital message under rotation, translation, scaling, and noise?
 
 \section{Pollock's Action Painting as a Prime-Factor Medium}
-Pollock's mature drip paintings abandon a single focal center in favor of an ``all-over'' field of interwoven poured-paint trajectories. Rapid arm motions produce thin filaments, while pauses and direction changes pool into thicker droplets and satellite splatters. This physical grammar maps naturally onto prime-factor synthesis:
+Pollock's mature drip paintings abandon a single focal center in favor of an ``all-over'' fractal field of interwoven poured-paint trajectories \citep{taylor1999fractal}. Rapid arm motions produce thin filaments, while pauses and direction changes pool into thicker droplets and satellite splatters. This physical grammar maps naturally onto prime-factor synthesis:
 \begin{itemize}
-  \item \textbf{Chromatic prime identity:} Each prime $p$ (indexed by $j \in \{0, 1, \dots\}$) is assigned an HSL color with golden-angle hue $H(p) = (j \cdot 137.508^\circ + 18^\circ) \bmod 360^\circ$, saturation $S(j) = 72 + (13j \bmod 18)\%$, and lightness $L = 42\%$ (shifted by $-7\%$ modulo $3$ for repeated strokes $k > 1$ in opaque mode).
+  \item \textbf{Chromatic prime identity:} Each prime $p$ (indexed by $j \in \{0, 1, \dots\}$) is assigned an HSL color with golden-angle hue $H(p) = (j \cdot 137.508^\circ + 18^\circ) \bmod 360^\circ$, saturation $S(j) = 72\% + (13j \bmod 18)\%$ (i.e., $13j \bmod 18$ percentage points above $72\%$), and lightness $L = 42\%$ (shifted by $-7\%$ modulo $3$ for repeated strokes $k > 1$ in opaque mode).
   \item \textbf{Deterministic drip trajectory:} Each prime occurrence $(p, k)$ seeds the 32-bit \texttt{mulberry32} PRNG with $\mathrm{seed}(p,k) = (p \cdot 2654435761) \oplus (k \cdot 40503311)$ (modulo $2^{32}$). Starting from a uniform point inside an $8\%$ canvas margin ($m = 0.08S$, span $W = S - 2m$) with initial heading $\theta_0 \sim \mathcal{U}[0, 2\pi)$ and speed $v_0 \sim \mathcal{U}[0.08S, 0.22S]$, each step $t = 1, \dots, 32$ updates:
   \begin{align*}
     \theta_t &= \theta_{t-1} + \delta_\theta, \qquad \delta_\theta \sim \mathcal{U}[-0.95, 0.95], \\
     v_t &= \operatorname{clip}\!\left(v_{t-1} \cdot \delta_v,\; 0.03S,\; 0.25S\right), \qquad \delta_v \sim \mathcal{U}[0.75, 1.30],
   \end{align*}
-  advancing $(x_t, y_t) = (x_{t-1} + v_t \cos\theta_t,\; y_{t-1} + v_t \sin\theta_t)$ with specular reflection at the margin boundaries. Segments are drawn as quadratic B\'ezier curves with a randomly perturbed midpoint control point and velocity-coupled width $w_t = \max(1,\; (1.15 - v_t / 0.25S)\, 0.048S)$, plus a paint pool (probability $0.38$) and $1$--$3$ spray droplets (probability $0.25$) per step.
+  advancing $(x_t, y_t) = (x_{t-1} + v_t \cos\theta_t,\; y_{t-1} + v_t \sin\theta_t)$ with specular reflection at the margin boundaries. Segments are drawn as quadratic B\'ezier curves with a randomly perturbed midpoint control point and velocity-coupled width $w_t = \max(1,\; (1.15 - v_t / (0.25S)) \cdot 0.048S)$, plus a paint pool (probability $0.38$) and $1$--$3$ spray droplets (probability $0.25$) per step.
   \item \textbf{Identity element:} The unit $n = 1$ corresponds to the blank linen ground ($I_{\mathrm{bg}} = \texttt{\#f4efe6}$, RGB $(244, 239, 230)$).
 \end{itemize}
+
+Table~\ref{tab:params} summarizes the trajectory and color parameters used in the $1 \le n \le 120$ integer-factorization regime versus the $K$-bit single-canvas codec of Section~\ref{sec:codec}; the codec uses slightly shorter, thinner strokes and a wider margin to reduce inter-stroke overlap when $64$--$128$ primes share one canvas and to preserve border headroom under rotation and translation.
+
+\begin{table}[ht]
+  \centering
+  \caption{Pollock synthesis parameters across the integer-factorization regime (Sections~2--4) and the single-canvas message codec (Section~\ref{sec:codec}).}
+  \label{tab:params}
+  \small
+  \begin{tabular}{@{}lcc@{}}
+    \toprule
+    Parameter & Integer Factorization ($n \le 120$) & Single-Canvas Codec ($K$ bits) \\
+    \midrule
+    Canvas size $S \times S$ & $100 \times 100$ (also $64$--$256$) & $512 \times 512$ \\
+    Margin & $8\%$ ($0.08S$) & $10\%$ ($0.10S$); top-skein $12\%$ \\
+    Steps per prime stroke & $32$ & $28$; top-skein $26$ \\
+    Width scale & $0.048S$ & $0.022S$; top-skein $0.028S$ \\
+    Opacity $\alpha$ (TMG) & $0.396$ & $0.50$ \\
+    Hue range & $[0^\circ, 360^\circ)$ & $[28^\circ, 330^\circ]$ (avoids crimson $T_0$) \\
+    Saturation / Lightness & $72 + (13j \bmod 18)\%$, $L=42\%$ & $66 + (13i \bmod 18)\%$, $L=43\%$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \section{Homomorphism vs.\ Generative Grammar}
 Encoding prime multiplicity $p^e$ exposes a fundamental design divide between \emph{factor-driven generative grammars} and \emph{true visual homomorphisms} (Figure~\ref{fig:modes}):
@@ -87,18 +109,18 @@ Encoding prime multiplicity $p^e$ exposes a fundamental design divide between \e
 In the spirit of \citet{franke1993generative}, where explicit mathematical rules govern generative visual composition, we first define two factor-driven grammars:
 \begin{enumerate}
   \item \textbf{Separate Strokes:} Each occurrence $k \in \{1, \dots, e\}$ paints an independent trajectory in $p$'s hue with slight lightness variation, using opaque \texttt{source-over} compositing.
-  \item \textbf{Path Extent:} Each distinct prime $p$ paints a single continuous trajectory whose step count scales linearly with $e$ ($S \cdot e$ steps). Because the PRNG is sequential, $p^1 \subset p^2 \subset p^3$ forms a prefix-preserving visual lineage.
+  \item \textbf{Path Extent:} Each distinct prime $p$ paints a single continuous trajectory whose step count scales linearly with $e$ ($S \cdot e$ steps). Because the PRNG is sequential, the pixel supports form a nested, prefix-preserving visual lineage $\operatorname{supp}(p^1) \subset \operatorname{supp}(p^2) \subset \operatorname{supp}(p^3)$.
 \end{enumerate}
 Like kanji radicals and Egyptian hieroglyphic quadrats \citep{goodman1968languages}, these generative grammars preserve immediately legible visual parts, at the cost of requiring the prime-factor multiset $\{p_i^{e_i}\}$ prior to rendering (opaque crossings depend on draw order, and flat RGB images cannot extend strokes when $\gcd(a,b) > 1$).
 
 \subsection{True Homomorphism Variants}
 \begin{enumerate}
-  \item \textbf{Translucent \texttt{multiply} Glazing (Pixel Homomorphism):} Each prime $p$ defines a translucent pigment attenuation field $A_p(x,y) \in (0, 1]^3$ ($A_p = 1$ outside $p$'s stroke mask, and $A_p = (1 - \alpha) + \alpha C_p$ inside, with $\alpha \approx 0.396$). Raising $p$ to exponent $e$ applies $e$ coats ($A_p^e$), yielding $I(n) = I_{\mathrm{bg}} \odot \prod_i A_{p_i}^{e_i}$. Defining the pixelwise combining law
+  \item \textbf{Translucent Multiply Glazing (TMG, Pixel Homomorphism):} Each prime $p$ defines a translucent pigment attenuation field $A_p(x,y) \in (0, 1]^3$ ($A_p = 1$ outside $p$'s stroke mask, and $A_p = (1 - \alpha) + \alpha C_p$ inside, with $\alpha \approx 0.396$). Raising $p$ to exponent $e$ applies $e$ coats ($A_p^e$), yielding $I(n) = I_{\mathrm{bg}} \odot \prod_i A_{p_i}^{e_i}$, where $\odot$ denotes the elementwise (Hadamard) product over pixels and RGB channels. Defining the pixelwise combining law
   \begin{equation}
     I(a) \star I(b) := I_{\mathrm{bg}} \odot \left(\frac{I(a)}{I_{\mathrm{bg}}}\right) \odot \left(\frac{I(b)}{I_{\mathrm{bg}}}\right)
   \end{equation}
   gives a strict commutative monoid homomorphism $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ for \emph{all} $a, b$ directly on flat images (Figure~\ref{fig:hom}, top).
-  \item \textbf{Toroidal Fourier Trajectory Sum (Vector Homomorphism):} Each prime $p$ seeds \texttt{mulberry32} with $(p \cdot 2654435761) \oplus \texttt{0x7f4a7c15}$ to sample a $6$-harmonic parametric curve $\gamma_p(t) \in \mathbb{R}^2$, $t \in [0, 1]$:
+  \item \textbf{Toroidal Trajectory Sum (TTS, Vector Homomorphism):} Each prime $p$ seeds \texttt{mulberry32} with $(p \cdot 2654435761) \oplus \texttt{0x7f4a7c15}$ to sample a $6$-harmonic parametric curve $\gamma_p(t) \in \mathbb{R}^2$, $t \in [0, 1]$:
   \[
     \gamma_p(t) = \sum_{m=1}^{6} \left( a_{p,m}^{(x)} \cos\!\left(2\pi f_{p,m}^{(x)} t + \phi_{p,m}^{(x)}\right),\; a_{p,m}^{(y)} \sin\!\left(2\pi f_{p,m}^{(y)} t + \phi_{p,m}^{(y)}\right) \right),
   \]
@@ -112,7 +134,7 @@ Like kanji radicals and Egyptian hieroglyphic quadrats \citep{goodman1968languag
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.92\textwidth]{figures/fig2_pollock_homomorphism.pdf}
-  \caption{Direct visual composition $6 \star 10 = 60$ under Translucent \texttt{multiply} Glazing (top) and Toroidal Fourier Trajectory Sum (bottom).}
+  \caption{Direct visual composition $6 \star 10 = 60$ under Translucent Multiply Glazing (TMG, top) and Toroidal Trajectory Sum (TTS, bottom).}
   \label{fig:hom}
 \end{figure}
 
@@ -129,7 +151,7 @@ Table~\ref{tab:proscons} summarizes the trade-offs between the two paradigms.
     \midrule
     Composition law & Factor-blind ($\Phi(a) \star \Phi(b)$) & Requires prime multiset $\{p_i^{e_i}\}$ \\
     Commutativity & Exact by construction & Requires canonical draw order \\
-    Prime powers ($p^e$) & $e$ glazes ($A_p^e$) or $e\gamma_p$ & $e$ strokes or $S\cdot e$ path extent \\
+    Prime powers ($p^e$) & $e$ glazes ($A_p^e$) or $e \cdot \gamma_p$ (toroidal sum) & $e$ strokes or $S\cdot e$ path extent \\
     Visual freedom & Constrained by algebra of $\star$ & High (opaque pigments, non-cluttered) \\
     Blind recovery & Glaze peeling or spectrum search & Top-down occlusion peeling \\
     \bottomrule
@@ -137,25 +159,32 @@ Table~\ref{tab:proscons} summarizes the trade-offs between the two paradigms.
 \end{table}
 
 \section{Blind Factor Recovery and Capacity ($1 \le n \le 120$)}
-We evaluate uniqueness and blind factor recovery from raw $100 \times 100$ \texttt{uint8} RGB bitmaps across $n \in \{1, \dots, 120\}$:
-\begin{itemize}
-  \item \textbf{Opaque Top-Down Peeling (Separate Strokes):} Since $(p, k)$ layers are drawn in ascending order, the highest $(p, k)$ present is unoccluded. Scanning $(p, k)$ in descending order, we match unoccluded pixels $U_{p,k} = \operatorname{supp}(T_{p,k}) \setminus \mathcal{O}$ and add $\operatorname{supp}(T_{p,k})$ to the occluded mask $\mathcal{O}$ upon detection.
-  \item \textbf{Multiplicative Glaze Peeling (Translucent \texttt{multiply}):} Because \texttt{multiply} blending monotonically darkens the normalized ground $R = I / I_{\mathrm{bg}}$, any $(p, e)$ present satisfies $R \le A_p^e + \varepsilon$ ($\varepsilon = 0.015$ for 8-bit quantization) on its support. Descending over $p$ and $e$, each detected glaze is divided out: $R \leftarrow \min(1, R / A_p^e)$ (Figure~\ref{fig:peeling}).
-  \item \textbf{Prime-Spectrum Search (Trajectory Sum):} Using only the $30$ prime Fourier curves $\{\gamma_p\}_{p \le 120}$, depth-first search over non-decreasing prime products $\prod p_i^{e_i} \le 120$ matches the rendered bitmap without storing any composite table.
-\end{itemize}
+We evaluate uniqueness and blind factor recovery from raw $100 \times 100$ \texttt{uint8} RGB bitmaps across $n \in \{1, \dots, 120\}$, using a dedicated recovery algorithm for each of the four Pollock variants:
+
+\subsection{Opaque Top-Down Peeling (Separate Strokes)}
+Since $(p, k)$ layers are drawn in ascending order, the highest $(p, k)$ present is unoccluded. Scanning $(p, k)$ in descending order, we match unoccluded pixels $U_{p,k} = \operatorname{supp}(T_{p,k}) \setminus \mathcal{O}$ and add $\operatorname{supp}(T_{p,k})$ to the occluded mask $\mathcal{O}$ upon detection.
+
+\subsection{Prefix-Trajectory Peeling (Path Extent)}
+Because each distinct prime $p$ draws a single trajectory of $S \cdot e$ steps in ascending prime order, scanning primes $p$ from largest to smallest and testing candidate multiplicities $e$ from highest to lowest ($p^e \le 120$) identifies the longest unoccluded prefix $\operatorname{supp}(T_{p,e}) \setminus \mathcal{O}$ present on the canvas, after which $\operatorname{supp}(T_{p,e})$ is added to $\mathcal{O}$.
+
+\subsection{Multiplicative Glaze Peeling (TMG)}
+Because \texttt{multiply} blending monotonically darkens the normalized ground $R = I / I_{\mathrm{bg}}$, any $(p, e)$ present satisfies $R \le A_p^e + \varepsilon$ ($\varepsilon = 0.015$ for 8-bit quantization) on its support. Descending over $p$ and $e$, each detected glaze is divided out: $R \leftarrow \min(1, R / A_p^e)$ (Figure~\ref{fig:peeling}).
+
+\subsection{Prime-Spectrum Search (TTS)}
+Using only the $30$ prime Fourier curves $\{\gamma_p\}_{p \le 120}$, depth-first search over non-decreasing prime products $\prod p_i^{e_i} \le 120$ matches the rendered bitmap without storing any composite table.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=0.95\textwidth]{figures/fig3_pollock_peeling.pdf}
-  \caption{Blind multiplicative glaze peeling of $n = 30 = 2 \times 3 \times 5$ in Pollock Translucent \texttt{multiply} mode.}
+  \caption{Blind multiplicative glaze peeling of $n = 30 = 2 \times 3 \times 5$ in Pollock Translucent Multiply Glazing (TMG) mode.}
   \label{fig:peeling}
 \end{figure}
 
-As shown in Table~\ref{tab:verification}, all tested Pollock variants achieve $120/120$ unique images and $120/120$ exact blind recovery ($0$ errors), with $0$ homomorphism errors across all $a \cdot b \le 120$.
+As shown in Table~\ref{tab:verification}, all four Pollock variants achieve $120/120$ unique images and $120/120$ exact blind recovery ($0$ errors) at $100 \times 100$, with $0$ homomorphism errors across all $a \cdot b \le 120$. In an image-size ablation across $64 \times 64$, $128 \times 128$, and $256 \times 256$ canvases, all four variants likewise retain $120/120$ uniqueness, $120/120$ exact blind recovery, and $0$ homomorphism errors at every tested resolution.
 
 \begin{table}[ht]
   \centering
-  \caption{Empirical uniqueness, blind recovery, and homomorphism checks ($n = 1 \dots 120$, $100 \times 100$ RGB).}
+  \caption{Empirical uniqueness, blind recovery, and homomorphism checks ($n = 1 \dots 120$, $100 \times 100$ RGB; identical $120/120$ scores also hold at $64 \times 64$, $128 \times 128$, and $256 \times 256$).}
   \label{tab:verification}
   \small
   \begin{tabular}{@{}lccc@{}}
@@ -163,25 +192,27 @@ As shown in Table~\ref{tab:verification}, all tested Pollock variants achieve $1
     Pollock Variant & Unique Images & Exact Recovery & Hom.\ Errors \\
     \midrule
     Separate Strokes (opaque) & $120 / 120$ & $120 / 120$ & --- \\
-    Translucent \texttt{multiply} Glaze & $120 / 120$ & $120 / 120$ & $0$ (pixel) \\
-    Toroidal Trajectory Vector Sum & $120 / 120$ & $120 / 120$ & $0$ (vector) \\
+    Path Extent (prefix-preserving) & $120 / 120$ & $120 / 120$ & --- \\
+    Translucent Multiply Glazing (TMG) & $120 / 120$ & $120 / 120$ & $0$ (pixel) \\
+    Toroidal Trajectory Sum (TTS) & $120 / 120$ & $120 / 120$ & $0$ (vector) \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \section{Single-Canvas Message Encoding and RTS Resilience}
-Rather than splitting a multi-character message into separate tiles, we can encode an entire $K$-bit binary string onto \emph{one unified Pollock canvas} by assigning bit index $i \in \{0, \dots, K-1\}$ to the $i$-th prime $p_i$ (with exponent $1$ if bit $i$ is $1$, and $0$ otherwise) under translucent \texttt{multiply} glazing ($\alpha = 0.50$, using $28$ steps, $10\%$ margin, width scale $0.022$, and hues restricted to $[28^\circ, 330^\circ]$ with $S(i) = 66 + (13i \bmod 18)\%$, $L=43\%$). Because each prime appears at most once, pixelwise saturation is avoided and the composition remains an organic ``all-over'' painting while retaining the pixel-level homomorphism on disjoint bit masks. For an $8$-character ASCII string such as \texttt{"MathArts"} ($64$ bits), only the first $64$ primes ($2 \dots 311$) are needed.
+\label{sec:codec}
+Rather than splitting a multi-character message into separate tiles, we can encode an entire $K$-bit binary string onto \emph{one unified Pollock canvas} by assigning bit index $i \in \{0, \dots, K-1\}$ to the $i$-th prime $p_i$ (with exponent $1$ if bit $i$ is $1$, and $0$ otherwise) under Translucent Multiply Glazing ($\alpha = 0.50$, using $28$ steps, $10\%$ margin, width scale $0.022$, and hues restricted to the contiguous arc $[28^\circ, 330^\circ]$—avoiding the $[330^\circ, 28^\circ]$ crimson wrap-around band—with $S(i) = 66 + (13i \bmod 18)\%$ and $L=43\%$). Because each prime appears at most once, pixelwise saturation is avoided and the composition remains an organic ``all-over'' painting while retaining the pixel-level homomorphism on disjoint bit masks. For an $8$-character ASCII string such as \texttt{"MathArts"} ($64$ bits), only the first $64$ primes ($2 \dots 311$) are needed.
 
 \subsection{Organic Skein Registration and Log-Attenuation Linear Decoding}
-To make single-canvas decoding resilient to \emph{rotation, translation, and scaling} (RTS) as well as compression and noise—without adding external finder squares or corner dots—we paint a single \emph{organic Pollock top-skein} $T_0$ ($\mathrm{seed} = \texttt{0x20261124}$, $26$ steps, $12\%$ margin, width scale $0.028$) in opaque Venetian crimson ($C_{T_0} = \texttt{\#8b101c}$, reserved outside the prime hue range) on top of the glazed data strokes. During decoding:
+To make single-canvas decoding resilient to \emph{rotation, translation, and scaling} (RTS) as well as compression and noise—without adding external finder squares or corner dots—we paint a single \emph{organic Pollock top-skein} $T_0$ ($\mathrm{seed} = \texttt{0x20261124}$, $26$ steps, $12\%$ margin, width scale $0.028$) in opaque Venetian crimson ($C_{T_0} = \texttt{\#8b101c}$, reserved inside the excluded crimson hue band) on top of the glazed data strokes. During decoding:
 \begin{enumerate}
   \item A soft chromatic response map $M(x,y) = \exp(-\|I(x,y) - C_{T_0}\|_2^2 / 30^2)$ isolates $T_0$ from the distorted canvas on a $0.25\times$ downsampled grid ($128 \times 128$ canonical).
-  \item \emph{Fourier--Mellin registration} resamples the high-pass FFT magnitude spectra onto a $180 \times 96$ log-polar grid ($\theta \in [0, \pi)$, $r \in [3, 0.45\min(H,W)]$) and applies phase correlation to estimate rotation and scale; both $\theta$ and $\theta + 180^\circ$ (with $\pm$ signs and reciprocal scale checks) are disambiguated and refined to $0.25^\circ$ and $0.5\%$ via normalized Cartesian FFT cross-correlation, followed by a full-resolution ($512 \times 512$) FFT translation polish within $\pm 24$~px.
+  \item \emph{Fourier--Mellin registration} \citep{reddy1996fft} resamples the high-pass FFT magnitude spectra onto a $180 \times 96$ log-polar grid ($\theta \in [0, \pi)$, radial frequency bins $r \in [3, 0.45\min(H,W)]$ pixels, where $r_{\min} = 3$ rejects DC and low-frequency vignette energy) and applies phase correlation to estimate rotation and scale; both $\theta$ and $\theta + 180^\circ$ (with $\pm$ signs and reciprocal scale checks) are disambiguated and refined using discrete search grid steps of $0.25^\circ$ and $0.5\%$ via normalized Cartesian FFT cross-correlation, followed by a full-resolution ($512 \times 512$) FFT translation polish within $\pm 24$~px.
   \item Masking out $T_0$, taking the negative logarithm of the normalized ground converts multiplicative glazing into an \emph{exact linear system} in log-attenuation space:
   \[
     L_{\mathrm{obs}}(x,y) := -\log\!\left(\frac{I_{\mathrm{aligned}}(x,y)}{I_{\mathrm{bg}}}\right) \approx \sum_{i=0}^{K-1} b_i\, L_i(x,y),
   \]
-  where $L_i$ is prime $p_i$'s log-attenuation vector $-\log((1-\alpha) + \alpha C_{p_i})$ on its unoccluded stroke support $\operatorname{supp}(p_i) \setminus \operatorname{supp}(T_0)$. Solving the $K \times K$ regularized normal equations $\hat{\mathbf{b}} = (G + 10^{-3} I)^{-1} \mathbf{y}$ (where $G_{ij} = \langle L_i, L_j \rangle$ and $y_i = \langle L_i, L_{\mathrm{obs}} \rangle$) decouples overlapping strokes and recovers each bit via $\hat{b}_i \ge 0.5$.
+  where $L_i$ is prime $p_i$'s log-attenuation vector $-\log((1-\alpha) + \alpha C_{p_i})$ on its unoccluded stroke support $\operatorname{supp}(p_i) \setminus \operatorname{supp}(T_0)$. Solving the $K \times K$ ridge (Tikhonov) regression system $\hat{\mathbf{b}} = (G + 10^{-3} I)^{-1} \mathbf{y}$ (where $G_{ij} = \langle L_i, L_j \rangle$ and $y_i = \langle L_i, L_{\mathrm{obs}} \rangle$) decouples overlapping strokes and recovers each bit via $\hat{b}_i \ge 0.5$.
 \end{enumerate}
 
 \begin{figure}[t]
@@ -191,27 +222,47 @@ To make single-canvas decoding resilient to \emph{rotation, translation, and sca
   \label{fig:leonardo_rts}
 \end{figure}
 
-Table~\ref{tab:rts} and Figure~\ref{fig:leonardo_rts} report our RTS stress-test results for \texttt{"MathArts"} ($64$ bits, $64/64$ exact recovery across all four regimes), alongside a $100$-trial Monte Carlo simulation of random $128$-bit messages (primes $2 \dots 719$ on $512 \times 512$, $12{,}800$ bits per regime) under random rotations in $[-180^\circ, 180^\circ]$, scales in $[0.80, 1.20]$, and shifts in $[-20, 20]^2$. On clean canvases, recovery is $100/100$ exact messages ($100.00\%$ bits); under combined random RTS + JPEG ($q=80$) or Gaussian noise ($\sigma=8$), bit-level accuracy remains $99.69\%$ and $99.72\%$, yielding $86/100$ exact uncoded $128$-bit messages (a raw bit error rate of $\approx 0.3\%$, well within reach of standard lightweight error-correcting codes). Note that while unbounded trajectory sums are hard to invert from static bitmaps, the underlying map $\mathbf{e} \mapsto \gamma_n$ is linear in the exponent vector and therefore serves as an \emph{artistic watermark or visual code} rather than a cryptographic primitive.
+Table~\ref{tab:rts} and Figure~\ref{fig:leonardo_rts} report our RTS stress-test results for \texttt{"MathArts"} ($64$ bits, $64/64$ exact recovery across all four regimes), alongside a $100$-trial Monte Carlo simulation of random $128$-bit messages (primes $2 \dots 719$ on $512 \times 512$, $12{,}800$ bits per regime) under random rotations in $[-180^\circ, 180^\circ]$, scales in $[0.80, 1.20]$, and shifts in $[-20, 20]^2$. On clean canvases, recovery is $100/100$ exact messages ($100.00\%$ bits, $0.00 \pm 0.00$ bit errors/trial, $106.7 \pm 2.7$~ms/decode); under combined random RTS + JPEG ($q=80$) or Gaussian noise ($\sigma=8$), bit-level accuracy remains $99.69\%$ ($0.40 \pm 1.16$ bit errors/trial, max $5$, $161.4 \pm 8.9$~ms/decode) and $99.72\%$ ($0.36 \pm 1.07$ bit errors/trial, max $5$, $162.4 \pm 9.6$~ms/decode), yielding $86/100$ exact uncoded $128$-bit messages. Because the raw bit error rate is $\approx 0.3\%$ (at most $5$ bit errors per $128$-bit canvas), appending a standard lightweight error-correcting code (e.g., a $t=5$ BCH or Reed--Solomon block code) in future work would bridge $86/100$ to near-$100\%$ message recovery at modest payload overhead.
+
+Compared with standard 2D machine codes such as QR or Data Matrix—which pack hundreds to thousands of bits per symbol using high-contrast binary modules and explicit finder squares—our single-canvas Pollock codec trades information density ($64$--$128$ bits on $512 \times 512$ pixels) for full aesthetic integration as an organic painting without artificial fiducial markers, while retaining sub-$0.3\%$ raw bit error under arbitrary similarity transforms, lossy JPEG compression, and additive noise. Note also that while unbounded trajectory sums are hard to invert from static bitmaps, any adversary who knows the public prime-template rendering rule and top-skein seed can synthesize the same $K$ templates and solve the same ridge regression system; furthermore, the underlying map $\mathbf{e} \mapsto \gamma_n$ is linear in the exponent vector. Thus the construction serves as an \emph{artistic watermark or steganographic visual code} rather than a cryptographic primitive.
 
 \begin{table}[ht]
   \centering
-  \caption{Single-canvas recovery ($512 \times 512$ Pollock canvas): $64$-bit \texttt{"MathArts"} and $100$-trial $128$-bit Monte Carlo.}
+  \caption{Single-canvas recovery across all $512 \times 512$ Pollock distortion regimes: $64$-bit \texttt{"MathArts"} and $100$-trial $128$-bit Monte Carlo (with mean $\pm$ std bit errors per trial and mean decode time).}
   \label{tab:rts}
-  \small
-  \begin{tabular}{@{}lcc@{}}
+  \footnotesize
+  \begin{tabular}{@{}lccc@{}}
     \toprule
-    Distortion Scenario & \texttt{"MathArts"} (64-bit) & 128-bit Monte Carlo (100 trials) \\
+    Distortion Scenario & \texttt{"MathArts"} (64-bit) & 128-bit Monte Carlo (100 trials) & Decode (ms) \\
     \midrule
-    Clean canonical & $64 / 64$ ($100\%$) & $100/100$ msgs ($12800/12800$ bits, $100.00\%$) \\
-    $27^\circ$ RTS (lossless) & $64 / 64$ ($100\%$) & --- \\
-    RTS + JPEG $q=80$ & $64 / 64$ ($100\%$) & $86/100$ msgs ($12760/12800$ bits, $99.69\%$) \\
-    RTS + noise $\sigma = 8$ & $64 / 64$ ($100\%$) & $86/100$ msgs ($12764/12800$ bits, $99.72\%$) \\
+    Clean canonical & $64/64$ ($100\%$) & $100/100$ msgs ($100.00\%$, $0.00 \pm 0.00$ err) & $106.7 \pm 2.7$ \\
+    $27^\circ$ RTS (lossless) & $64/64$ ($100\%$) & --- & --- \\
+    RTS + JPEG $q=80$ & $64/64$ ($100\%$) & $86/100$ msgs ($99.69\%$, $0.40 \pm 1.16$ err) & $161.4 \pm 8.9$ \\
+    RTS + noise $\sigma = 8$ & $64/64$ ($100\%$) & $86/100$ msgs ($99.72\%$, $0.36 \pm 1.07$ err) & $162.4 \pm 9.6$ \\
     \bottomrule
   \end{tabular}
 \end{table}
 
+\section{Limitations}
+Several practical boundaries bound the current framework:
+\begin{enumerate}
+  \item \textbf{Capacity and stroke crowding:} As $K$ grows beyond $128$ primes on a $512 \times 512$ canvas, stroke overlap increases off-diagonal conditioning in the Gram matrix $G$ and raises attenuation saturation, requiring larger canvases or thinner filaments.
+  \item \textbf{Geometric warp model:} Fourier--Mellin registration handles planar similarity transforms (rotation, uniform scaling, and translation) within the tested scale range $[0.80, 1.20]$; severe perspective skew, non-uniform aspect-ratio stretching, or heavy cropping of the top-skein $T_0$ would require projective registration.
+  \item \textbf{Chromatic sensitivity:} Both the crimson top-skein response map $M(x,y)$ and log-attenuation decoding assume approximately calibrated RGB white balance and gamma; strong ambient color casts or print-scan tonal curves would require color normalization prior to decoding.
+  \item \textbf{Precomputation cost:} Decoding precomputes $K$ prime stroke templates and the $K \times K$ regularized inverse $(G + 10^{-3}I)^{-1}$ once per keyset, which scales quadratically in $K$ for template overlap inner products.
+\end{enumerate}
+
 \section{Conclusion}
-Focusing on Jackson Pollock's drip-painting aesthetic demonstrates that visual number representations can bridge formal algebra and expressive art. While generative-grammar encodings prioritize clear, layered silhouettes, translucent \texttt{multiply} glazing and toroidal Fourier trajectory addition achieve true monoid homomorphisms $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ over all $a, b$. Extending translucent glazing to $64$ primes on a single $512 \times 512$ canvas with an integrated organic top-skein turns a complete digital string (\texttt{"MathArts"}) into an all-over painting—free of any external registration dots—that remains $100\%$ decodable under rotation, scaling, translation, JPEG compression, and Gaussian noise. Interactive code and the broader multi-style comparison (including binary XOR-convolution, Klee watercolors, and Kandinsky \emph{Composition VIII}) are available at \url{https://github.com/leolca/prime_visual_algebra}.
+Focusing on Jackson Pollock's drip-painting aesthetic demonstrates that visual number representations can bridge formal algebra and expressive art. While generative-grammar encodings prioritize clear, layered silhouettes, Translucent Multiply Glazing (TMG) and Toroidal Trajectory Sum (TTS) achieve true monoid homomorphisms $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ over all $a, b$. Extending TMG to $64$--$128$ primes on a single $512 \times 512$ canvas with an integrated organic top-skein turns a complete digital string (\texttt{"MathArts"}) into an all-over painting—free of any external registration dots—that remains $100\%$ decodable under rotation, scaling, translation, JPEG compression, and Gaussian noise.
+
+\section*{Code and Data Availability}
+The complete Python implementation, verification suite (\texttt{verify\_decomposition.py}), single-canvas RTS codec (\texttt{pollock\_codec.py}), figure-generation scripts, and the broader multi-style comparison (including binary XOR-convolution, Klee watercolors, and Kandinsky \emph{Composition VIII}) are publicly available at \url{https://github.com/leolca/prime_visual_algebra}.
+
+\section*{Disclosure Statement}
+The author reports there are no competing interests to declare.
+
+\section*{Funding}
+This research received no external funding.
 
 \bibliographystyle{tfapacite}
 \bibliography{references}

@@ -239,6 +239,16 @@ A natural question is how far $N$ can be increased to store more bits per image,
   \label{fig:leonardo}
 \end{figure}
 
+\subsection{Single-Canvas Pollock Encoding and RTS/Noise Resilience}
+As an extension of the Pollock \texttt{multiply} model, an entire $K$-bit string can also be encoded onto \emph{one unified $512 \times 512$ canvas} by mapping bit $i$ to prime $p_i$ (e.g., primes $2 \dots 311$ for $64$-bit \texttt{"Leonardo"}, or $2 \dots 719$ for $128$ bits) and integrating an opaque crimson Pollock top-skein ($T_0$) for Fourier--Mellin (log-polar FFT) registration, paired with a log-attenuation linear solver $L_{\mathrm{obs}} = -\log(I/I_{\mathrm{bg}}) \approx \sum b_i L_i$. Across a $100$-trial Monte Carlo benchmark of random $128$-bit messages ($12{,}800$ bits per regime), this single-canvas codec achieves $100/100$ exact messages ($100.00\%$ bits) on clean canvases, $86/100$ exact messages ($99.69\%$ bits) under random rotation/translation/scaling (RTS) + JPEG ($q=80$), and $86/100$ exact messages ($99.72\%$ bits) under random RTS + additive Gaussian noise ($\sigma=8$), while recovering \texttt{"Leonardo"} with $64/64$ exact bits in all tested regimes (Figure~\ref{fig:report_rts}).
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig4_pollock_leonardo_rts.pdf}
+  \caption{Single-canvas $64$-bit encoding of \texttt{"Leonardo"} (primes $2 \dots 311$, $512 \times 512$, organic top-skein): (a) canonical; (b) rotated $143^\circ$, $1.15\times$, shifted, JPEG $q=80$; (c) Fourier--Mellin aligned and decoded ($64/64$ bits); (d) rotated $-38^\circ$ with Gaussian noise $\sigma=8$, decoded ($64/64$ bits).}
+  \label{fig:report_rts}
+\end{figure}
+
 \section{Conclusion}
 Moving from side-by-side prime motifs to algebraic and painterly composition laws reveals a productive trade-off between mathematical rigor and visual expression. 2D cyclic XOR-convolution provides a true pixel-level homomorphism whose binary core can be masked behind organic or geometric styles without losing exact invertibility. Conversely, painterly superpositions inspired by Pollock, Klee, and Kandinsky trade pixel-level ring structure for rich color, glazing, and spatial rhythm while remaining forensically decomposable over finite ranges. Interactive code and SVG/PNG/PDF export tools are available at \url{https://github.com/leolca/prime_visual_algebra}.
 

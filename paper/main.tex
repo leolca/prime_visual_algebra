@@ -33,8 +33,8 @@
 \title{Visual Number Algebras: From Binary XOR-Convolution to Painterly Prime-Factor Superposition}
 
 \author{
-\name{Leonardo Costa\textsuperscript{a}\thanks{CONTACT Leonardo Costa. Email: your.email@institution.edu}}
-\affil{\textsuperscript{a}Department / Institution, City, Country}
+\name{Leonardo Ara\'{u}jo\textsuperscript{a}\thanks{CONTACT Leonardo Ara\'{u}jo. Email: leolca@ufsj.edu.br}}
+\affil{\textsuperscript{a}DTECH/UFSJ --- Universidade Federal de S\~{a}o Jo\~{a}o del-Rei, Ouro Branco, MG, Brazil}
 }
 
 \maketitle
@@ -217,6 +217,27 @@ Table~\ref{tab:verification} summarizes our empirical verification across all $n
     \bottomrule
   \end{tabular}
 \end{table}
+
+\section{Scaling, Capacity, and Message Encoding}
+A natural question is how far $N$ can be increased to store more bits per image, and how these representations behave when encoding arbitrary digital messages:
+
+\begin{itemize}
+  \item \textbf{Capacity limits per system.}
+  In $R_{W,H} = \mathbb{F}_2[x,y]/(x^W-1, y^H-1)$, capacity is bounded by $W \times H$ bits, and avoiding cyclic wrap-around of powers of $2$ requires $\operatorname{lcm}(\operatorname{ord}_W(2), \operatorname{ord}_H(2)) > \lfloor \log_2 N \rfloor$ (e.g., $W=H=9$ suffices up to $2^{63}$, while $W=H=11$ suffices up to $2^{1023}$). In practice, $N=256$ ($8$ bits/tile) or $N=1024$ ($10$ bits/tile) is fast on $11 \times 11$ or $13 \times 13$ grids. For the painterly modes, capacity is bounded by 8-bit color saturation under repeated \texttt{multiply} coats ($\approx 8$--$10$ coats) and by visual clutter as the number of prime factors $\Omega(n) \le \lfloor \log_2 N \rfloor$ grows.
+
+  \item \textbf{Chunked message encoding.}
+  Rather than forcing a single tile to represent a huge integer, arbitrary byte streams can be split into fixed-range symbols (just as QR codes split data into finite-field symbols): mapping each byte $b \in \{0,\dots,255\}$ to $n = b + 1 \in \{1,\dots,256\}$ (or using $N=120$ for printable ASCII) allows any message to be rendered as a frieze or mosaic of artistic tiles. Figure~\ref{fig:leonardo} illustrates the 8-character word \texttt{"Leonardo"} (ASCII codes $76, 101, 111, 110, 97, 114, 100, 111$, all within $N=120$) encoded across Organic Ink XOR-convolution, Klee watercolor, and Kandinsky \emph{Composition VIII}.
+
+  \item \textbf{Scope and robustness.}
+  Although unbounded trajectory sums are hard to invert from a static bitmap once self-intersections accumulate, the underlying map $\mathbf{e} \mapsto \gamma_n$ is linear in the exponent vector and thus serves as an \emph{artistic watermark or visual code} rather than a cryptographic primitive. Likewise, our current blind decoders operate on lossless, pixel-aligned bitmaps; extending them to photographed or print-and-scan artworks requires adding corner fiducial markers for geometric registration and soft correlation thresholds for quantization noise.
+\end{itemize}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig5_message_leonardo.pdf}
+  \caption{Encoding the 8-character string \texttt{"Leonardo"} (ASCII $76, 101, 111, 110, 97, 114, 100, 111$) as an 8-tile artistic frieze under Binary XOR-Convolution (Organic Ink), Klee 1914 Watercolor, and Kandinsky \emph{Composition VIII}.}
+  \label{fig:leonardo}
+\end{figure}
 
 \section{Conclusion}
 Moving from side-by-side prime motifs to algebraic and painterly composition laws reveals a productive trade-off between mathematical rigor and visual expression. 2D cyclic XOR-convolution provides a true pixel-level homomorphism whose binary core can be masked behind organic or geometric styles without losing exact invertibility. Conversely, painterly superpositions inspired by Pollock, Klee, and Kandinsky trade pixel-level ring structure for rich color, glazing, and spatial rhythm while remaining forensically decomposable over finite ranges. Interactive code and SVG/PNG/PDF export tools are available at \url{https://github.com/leolca/prime_visual_algebra}.

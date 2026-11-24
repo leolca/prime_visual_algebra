@@ -296,9 +296,50 @@ def fig4_peeling_decomposition() -> None:
     plt.close(fig)
 
 
+def fig5_message_leonardo() -> None:
+    w, h, tiles = load_tiles()
+    word = "Leonardo"
+    chars = list(word)
+    codes = [ord(ch) for ch in chars]
+
+    fig, axes = plt.subplots(3, len(chars), figsize=(11.2, 4.5))
+    fig.patch.set_facecolor("white")
+
+    # Row 0: Binary XOR-Convolution rendered in Organic Ink (lossless)
+    for c, (ch, n) in enumerate(zip(chars, codes)):
+        ax = axes[0, c]
+        grid = np.array(mask_to_grid(tiles[n], w, h))
+        draw_organic_tile(ax, grid)
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#bbbbbb")
+            spine.set_linewidth(0.7)
+        ax.set_title(f"'{ch}' ({n})\n[{format_fac(n)}]", fontsize=8.2, fontweight="bold", pad=3)
+        if c == 0:
+            ax.set_ylabel("XOR-Conv.\n(Organic Ink)", fontsize=8.5, fontweight="bold", rotation=0, labelpad=44, va="center")
+
+    # Row 1: Klee 1914 Watercolor
+    # Row 2: Kandinsky Comp. VIII
+    for r_idx, (mode, label) in enumerate([("klee", "Klee 1914\nWatercolor"), ("kandinsky", "Kandinsky\nComp. VIII")], start=1):
+        for c, n in enumerate(codes):
+            ax = axes[r_idx, c]
+            img = render_composite(mode, n, size=180)
+            ax.imshow(img)
+            ax.set_xticks([]); ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_edgecolor("#bbbbbb")
+                spine.set_linewidth(0.7)
+            if c == 0:
+                ax.set_ylabel(label, fontsize=8.5, fontweight="bold", rotation=0, labelpad=44, va="center")
+
+    plt.tight_layout(h_pad=0.6, w_pad=0.4)
+    fig.savefig(FIG_DIR / "fig5_message_leonardo.pdf", bbox_inches="tight", dpi=300)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     fig1_xor_grid()
     fig2_xor_presentations()
     fig3_painterly_gallery()
     fig4_peeling_decomposition()
+    fig5_message_leonardo()
     print("Generated all figures in", FIG_DIR)

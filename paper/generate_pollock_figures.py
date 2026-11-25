@@ -97,8 +97,8 @@ def fig1_pollock_modes() -> None:
     variants = [
         ("separate", "Separate Strokes\n(Grammar)"),
         ("extent", "Path Extent\n(Grammar)"),
-        ("glaze", "Translucent Multiply\n(Pixel Hom.)"),
-        ("trajectory", "Trajectory Sum\n(Vector Hom.)"),
+        ("glaze", "Translucent Multiply\n(Pixel-Space Hom.)"),
+        ("trajectory", "Trajectory Sum\n(Traj.-Space Hom.)"),
     ]
     fig, axes = plt.subplots(len(variants), len(nums), figsize=(10.5, 7.2))
     fig.patch.set_facecolor("white")
@@ -122,7 +122,7 @@ def fig2_pollock_homomorphism() -> None:
     fig, axes = plt.subplots(2, 3, figsize=(7.5, 4.8))
     fig.patch.set_facecolor("white")
     pairs = [
-        ("glaze", "Translucent Multiply:\n$I(6) \\star I(10) = I(60)$"),
+        ("glaze", "Translucent Multiply Glazing:\n$I(6) \\star I(10) = I(60)$"),
         ("trajectory", "Toroidal Trajectory Sum:\n$\\gamma(6) + \\gamma(10) \\equiv \\gamma(60)$"),
     ]
     nums = [6, 10, 60]

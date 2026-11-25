@@ -85,7 +85,7 @@ Pollock's mature drip paintings abandon a single focal center in favor of an ``a
     \theta_t &= \theta_{t-1} + \delta_\theta, \qquad \delta_\theta \sim \mathcal{U}[-0.95, 0.95]\text{~rad}, \\
     v_t &= \operatorname{clip}\!\left(v_{t-1} \cdot \delta_v,\; 0.03S,\; 0.25S\right)\text{~px/step}, \qquad \delta_v \sim \mathcal{U}[0.75, 1.30],
   \end{align*}
-  advancing $(x_t, y_t) = (x_{t-1} + v_t \cos\theta_t,\; y_{t-1} + v_t \sin\theta_t)$ with specular reflection at the margin boundaries. Segments are drawn as quadratic B\'ezier curves with a randomly perturbed midpoint control point and velocity-coupled width $w_t = \max(1,\; (1.15 - v_t / (0.25S)) \cdot 0.048S)$~px, plus a paint pool (probability $0.38$) and $1$--$3$ spray droplets (probability $0.25$) per step.
+  advancing $(x_t, y_t) = (x_{t-1} + v_t \cos\theta_t,\; y_{t-1} + v_t \sin\theta_t)$ with specular reflection at the margin boundaries. Segments are drawn through a randomly perturbed midpoint control point $(c_x, c_y)$ (rendered as two-segment polylines in the Python verifier and quadratic B\'ezier curves in the interactive browser explorer) with velocity-coupled width $w_t = \max(1,\; \operatorname{round}((1.15 - v_t / (0.25S)) \cdot 0.048S))$~px, plus a paint pool (probability $0.38$) and $1$--$3$ spray droplets (probability $0.25$) per step.
   \item \textbf{Identity element:} The unit $n = 1$ corresponds to the blank linen ground ($I_{\mathrm{bg}} = \texttt{\#f4efe6}$, RGB $(244, 239, 230)$).
 \end{itemize}
 
@@ -103,20 +103,21 @@ Table~\ref{tab:params} summarizes the trajectory and color parameters used in th
     \multicolumn{4}{@{}l}{\emph{Canvas \& Trajectory}} \\
     Canvas size $S \times S$ & $100 \times 100$ ($64$--$256$ ablation) & $512 \times 512$ & $512 \times 512$ (shared) \\
     Margin & $8\%$ ($0.08S$) & $10\%$ ($0.10S$) & $12\%$ ($0.12S$) \\
-    Steps per stroke & $32$ & $28$ & $26$ \\
-    Width scale & $0.048S$ & $0.022S$ & $0.028S$ \\
+    Steps per stroke & $T_{\mathrm{base}} = 32$ & $28$ & $26$ \\
+    Speed range $v_t$ & $[0.03S, 0.25S]$ & $[0.025S, 0.18S]$ & $[0.025S, 0.18S]$ \\
+    Width scale & $0.048S$ ($\min 1$~px) & $0.022S$ ($\min 2$~px) & $0.028S$ ($\min 2$~px) \\
     \addlinespace
     \multicolumn{4}{@{}l}{\emph{Color \& Compositing}} \\
     Opacity $\alpha$ (TMG) & $0.396$ & $0.50$ & $1.00$ (opaque) \\
     Hue range & $[0^\circ, 360^\circ)$ & $[28^\circ, 330^\circ]$ & Crimson (\texttt{\#8b101c}) \\
     Saturation & $72\% + (13j \bmod 18)\%$ & $66\% + (13i \bmod 18)\%$ & Fixed RGB $(139,16,28)$ \\
-    Lightness & $42\%$ ($-7\% \bmod 3$ if $k>1$) & $43\%$ & Fixed RGB $(139,16,28)$ \\
+    Lightness & $42\%$ ($-7\%((k{-}1)\bmod 3)$) & $43\%$ & Fixed RGB $(139,16,28)$ \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \section{Homomorphism vs.\ Generative Grammar}
-Let $(\mathbb{N}_{>0}, \cdot, 1)$ denote the multiplicative commutative monoid of positive integers, $\mathcal{I}$ a representation space equipped with a binary composition $\star$, and $\Phi : \mathbb{N}_{>0} \to \mathcal{I}$ an encoding map. We call $\Phi$ a \emph{visual homomorphism} if $\Phi(1) = I_{\mathrm{bg}}$ and $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ for all $a, b \in \mathbb{N}_{>0}$, without inspecting the prime factors of $a$ or $b$. By contrast, a \emph{generative grammar} requires the prime-factor multiset $\{p_i^{e_i}\}$ prior to rendering. This algebraic divide is illustrated in Figure~\ref{fig:modes}:
+Let $(\mathbb{N}_{>0}, \cdot, 1)$ denote the multiplicative commutative monoid of positive integers, $\mathcal{I}$ a representation space equipped with a binary composition $\star$, and $\Phi : \mathbb{N}_{>0} \to \mathcal{I}$ an encoding map \citep{dummit2003abstract}. We call $\Phi$ a \emph{visual homomorphism} (i.e., a monoid homomorphism) if $\Phi(1) = I_{\mathrm{bg}}$ and $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ for all $a, b \in \mathbb{N}_{>0}$, without inspecting the prime factors of $a$ or $b$. By contrast, a \emph{generative grammar} requires the prime-factor multiset $\{p_i^{e_i}\}$ prior to rendering. This algebraic divide is illustrated in Figure~\ref{fig:modes}:
 
 \begin{figure}[t]
   \centering
@@ -129,7 +130,7 @@ Let $(\mathbb{N}_{>0}, \cdot, 1)$ denote the multiplicative commutative monoid o
 In the spirit of \citet{franke1993generative}, where explicit mathematical rules govern generative visual composition, we first define two factor-driven grammars:
 \begin{enumerate}
   \item \textbf{Separate Strokes:} Each occurrence $k \in \{1, \dots, e\}$ paints an independent trajectory in $p$'s hue with lightness variation $L(k) = 42\% - 7\% \cdot ((k - 1) \bmod 3)$, using opaque \texttt{source-over} compositing.
-  \item \textbf{Path Extent:} Each distinct prime $p$ paints a single continuous trajectory whose step count scales linearly with $e$ ($S \cdot e$ steps). Because the PRNG is sequential, the geometric and rasterized trajectory supports prior to occlusion by subsequent primes form a nested, prefix-preserving lineage $\operatorname{supp}(T_{p,1}) \subset \operatorname{supp}(T_{p,2}) \subset \operatorname{supp}(T_{p,3})$.
+  \item \textbf{Path Extent:} Each distinct prime $p$ paints a single continuous trajectory whose step count scales linearly with $e$ ($T_{\mathrm{base}} \cdot e$ steps, $T_{\mathrm{base}} = 32$). Because the PRNG is sequential, the geometric and rasterized trajectory supports prior to occlusion by subsequent primes form a nested, prefix-preserving lineage $\operatorname{supp}(T_{p,1}) \subset \operatorname{supp}(T_{p,2}) \subset \operatorname{supp}(T_{p,3})$.
 \end{enumerate}
 Like kanji radicals and Egyptian hieroglyphic quadrats \citep{goodman1968languages}, these generative grammars preserve immediately legible visual parts, at the cost of requiring the prime-factor multiset $\{p_i^{e_i}\}$ prior to rendering (opaque crossings depend on draw order, and flat RGB images cannot extend strokes when $\gcd(a,b) > 1$).
 
@@ -141,7 +142,7 @@ Let $\mathcal{I}_{\mathrm{cont}} = (0, 1]^{H \times W \times 3}$ be the space of
 \end{equation}
 $(\mathcal{I}_{\mathrm{cont}}, \star, I_{\mathrm{bg}})$ is a commutative monoid and $\Phi_{\mathrm{TMG}}(a \cdot b) = \Phi_{\mathrm{TMG}}(a) \star \Phi_{\mathrm{TMG}}(b)$ holds identically for all $a, b \in \mathbb{N}_{>0}$ (Figure~\ref{fig:hom}, top).
 \end{proposition}
-Here digital \texttt{multiply} blending serves as a mathematical attenuation model inspired by translucent glazes rather than a physical simulation of subtractive Kubelka--Munk pigment mixing. Moreover, 8-bit raster quantization $Q(x) = \operatorname{clip}(\operatorname{round}(255x), 0, 255)$ breaks exact associativity ($Q(I(a) \star I(b)) \neq Q(Q(I(a)) \star Q(I(b)))$ in general): across all $306$ pairs $a \cdot b \le 120$ on $100 \times 100$ \texttt{uint8} RGB canvases, the maximum channel discrepancy is $1 / 255$ ($1$ LSB), affecting $56{,}203$ of $9{,}180{,}000$ channels ($0.61\%$).
+Here digital \texttt{multiply} blending serves as a mathematical attenuation model inspired by translucent glazes rather than a physical simulation of subtractive Kubelka--Munk pigment mixing. Moreover, 8-bit raster quantization $Q(x) = \operatorname{clip}(\operatorname{round}(255x), 0, 255)$ breaks exact associativity ($Q(I(a) \star I(b)) \neq Q(Q(I(a)) \star Q(I(b)))$ in general): across all $306$ pairs $a \cdot b \le 120$ on $100 \times 100$ \texttt{uint8} RGB canvases, the maximum channel discrepancy is $1 / 255$ ($1$ LSB), affecting $97{,}757$ of $9{,}180{,}000$ channels ($1.06\%$).
 
 \begin{proposition}[TTS Trajectory-Space Homomorphism]
 Each prime $p$ seeds \texttt{mulberry32} with $(p \cdot 2654435761) \oplus \texttt{0x7f4a7c15}$ to sample a $6$-harmonic parametric curve $\gamma_p : [0, 1] \to \mathbb{R}^2$:
@@ -176,7 +177,7 @@ Table~\ref{tab:proscons} summarizes the trade-offs between the two paradigms.
     \midrule
     Composition law & Factor-blind ($\Phi(a) \star \Phi(b)$) & Requires prime multiset $\{p_i^{e_i}\}$ \\
     Commutativity & Exact by construction & Requires canonical draw order \\
-    Prime powers ($p^e$) & $e$ glazes ($A_p^e$) or $e \cdot \gamma_p$ (toroidal sum) & $e$ strokes or $S\cdot e$ path extent \\
+    Prime powers ($p^e$) & $e$ glazes ($A_p^e$) or $e \cdot \gamma_p$ (toroidal sum) & $e$ strokes or $T_{\mathrm{base}}\cdot e$ path extent \\
     Visual freedom & Constrained by algebra of $\star$ & High (opaque pigments, non-cluttered) \\
     Blind recovery & Glaze peeling or spectrum search & Top-down occlusion peeling \\
     \bottomrule
@@ -190,7 +191,7 @@ We evaluate image uniqueness (exact \texttt{uint8} RGB-array equality across all
 Since $(p, k)$ layers are drawn in ascending order, the highest $(p, k)$ present is unoccluded. Scanning $(p, k)$ in descending order, we match unoccluded pixels $U_{p,k} = \operatorname{supp}(T_{p,k}) \setminus \mathcal{O}$ and add $\operatorname{supp}(T_{p,k})$ to the occluded mask $\mathcal{O}$ upon detection.
 
 \subsection{Prefix-Trajectory Peeling (Path Extent)}
-Because each distinct prime $p$ draws a single trajectory of $S \cdot e$ steps in ascending prime order, scanning primes $p$ from largest to smallest and testing candidate multiplicities $e$ from highest to lowest ($p^e \le 120$) identifies the longest unoccluded prefix $\operatorname{supp}(T_{p,e}) \setminus \mathcal{O}$ present on the canvas, after which $\operatorname{supp}(T_{p,e})$ is added to $\mathcal{O}$.
+Because each distinct prime $p$ draws a single trajectory of $T_{\mathrm{base}} \cdot e$ steps in ascending prime order, scanning primes $p$ from largest to smallest and testing candidate multiplicities $e$ from highest to lowest ($p^e \le 120$) identifies the longest unoccluded prefix $\operatorname{supp}(T_{p,e}) \setminus \mathcal{O}$ present on the canvas, after which $\operatorname{supp}(T_{p,e})$ is added to $\mathcal{O}$.
 
 \subsection{Multiplicative Glaze Peeling (TMG)}
 Because \texttt{multiply} blending monotonically darkens the normalized ground $R = I / I_{\mathrm{bg}}$, any $(p, e)$ present satisfies $R \le A_p^e + \varepsilon$ ($\varepsilon = 0.015$ for 8-bit quantization) on its support. Descending over $p$ and $e$, each detected glaze is divided out: $R \leftarrow \min(1, R / A_p^e)$ (Figure~\ref{fig:peeling}).
@@ -218,15 +219,15 @@ As shown in Table~\ref{tab:verification}, all four Pollock variants achieve $120
     \midrule
     Separate Strokes (opaque) & $120/120$ & $120/120$ & --- \\
     Path Extent (prefix-preserving) & $120/120$ & $120/120$ & --- \\
-    Translucent Multiply Glazing (TMG) & $120/120$ & $120/120$ & $0$ (pixel) \\
-    Toroidal Trajectory Sum (TTS) & $120/120$ & $120/120$ & $0$ (vector) \\
+    Translucent Multiply Glazing (TMG) & $120/120$ & $120/120$ & $0$ (pixel space) \\
+    Toroidal Trajectory Sum (TTS) & $120/120$ & $120/120$ & $0$ (traj.\ space) \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \section{Single-Canvas Message Encoding and RTS Resilience}
 \label{sec:codec}
-Rather than splitting a multi-character message into separate tiles, we encode an entire $K$-bit binary string onto \emph{one unified Pollock canvas} using UTF-8 byte encoding in most-significant-bit-first order and assigning bit index $i \in \{0, \dots, K-1\}$ to the $i$-th prime $p_i$ in ascending order ($2, 3, 5, \dots$), with exponent $1$ if $b_i = 1$ and $0$ otherwise. Rendering uses Translucent Multiply Glazing ($\alpha = 0.50$, $28$ steps, $10\%$ margin, width scale $0.022$, $S(i) = 66 + (13i \bmod 18)\%$, $L=43\%$) with hues restricted to a $302^\circ$ contiguous arc that excludes a $58^\circ$ guard band around the registration pattern's hue (defaulting to $[28^\circ, 330^\circ]$ for Venetian crimson). Because each prime appears at most once, attenuation saturation is avoided while retaining the pixel-space homomorphism on disjoint bit masks. For \texttt{"MathArts"} ($8$ UTF-8 bytes, $64$ bits), only the first $64$ primes ($2 \dots 311$) are needed.
+Rather than splitting a multi-character message into separate tiles, we encode an entire $K$-bit binary string onto \emph{one unified Pollock canvas} using UTF-8 byte encoding in most-significant-bit-first order and assigning bit index $i \in \{0, \dots, K-1\}$ to the $i$-th prime $p_i$ in ascending order ($2, 3, 5, \dots$), with exponent $1$ if $b_i = 1$ and $0$ otherwise. Each active prime seeds \texttt{mulberry32} with $(p_i \cdot 2654435761) \oplus \texttt{0x40503311}$ (modulo $2^{32}$) and renders under Translucent Multiply Glazing ($\alpha = 0.50$, $28$ steps, $10\%$ margin, $v_0 \sim \mathcal{U}[0.06S, 0.17S]$, $v_t \in [0.025S, 0.18S]$, width $w_t = \max(2, \operatorname{round}((1.15 - v_t/(0.18S)) \cdot 0.022S))$, pool probability $0.35$ with no spray droplets, $S(i) = 66 + (13i \bmod 18)\%$, $L=43\%$) with hues restricted to a $302^\circ$ contiguous arc that excludes a $58^\circ$ guard band around the registration pattern's hue (defaulting to $[28^\circ, 330^\circ]$ for Venetian crimson). Because each prime appears at most once, attenuation saturation is avoided while retaining the pixel-space homomorphism on disjoint bit masks. For \texttt{"MathArts"} ($8$ UTF-8 bytes, $64$ bits), only the first $64$ primes ($2 \dots 311$) are needed.
 
 \subsection{Keyed Organic Registration Skein and Log-Attenuation Decoding}
 To align rotated, translated, and scaled (RTS) canvases without external finder squares or corner dots, we paint an \emph{integrated registration pattern} (top-skein $T_0$, $26$ steps, $12\%$ margin, width scale $0.028$) on top of the glazed data strokes. Crucially, both the PRNG seed and pigment color of $T_0$ are parameterizable: a default public seed ($\texttt{0x20261124}$, Venetian crimson $C_{T_0} = \texttt{\#8b101c}$) enables open decoding, whereas an artist-chosen seed and color (e.g., Ultramarine \texttt{\#163a70} or Forest Viridian \texttt{\#145233}) yield distinct visual compositions and act as a keyed registration template (optionally stamped as a small margin signature). During decoding:
@@ -258,7 +259,7 @@ Figure~\ref{fig:leonardo_rts} illustrates $64/64$ bit recovery for \texttt{"Math
 
 \begin{table}[ht]
   \centering
-  \caption{Single-canvas recovery across $512 \times 512$ Pollock distortion regimes ($1{,}000$-trial Monte Carlo for $64$-bit and $128$-bit payloads; $95\%$ Wilson confidence intervals for bit and message rates; decode times on a $16$-worker benchmark).}
+  \caption{Single-canvas recovery across $512 \times 512$ Pollock distortion regimes ($1{,}000$-trial Monte Carlo for $64$-bit and $128$-bit payloads; $95\%$ Wilson confidence intervals for bit and exact-message rates).}
   \label{tab:rts}
   \footnotesize
   \begin{tabular}{@{}llll@{}}
@@ -285,7 +286,7 @@ Several practical boundaries bound the current framework:
 \begin{enumerate}
   \item \textbf{Capacity and stroke crowding:} As $K$ grows beyond $128$ primes on a $512 \times 512$ canvas ($4.88 \times 10^{-4}$~bits/pixel), stroke overlap increases Gram-matrix conditioning $\kappa(G)$ and raises attenuation saturation, requiring larger canvases or thinner filaments.
   \item \textbf{Geometric warp model:} Fourier--Mellin registration handles planar similarity transforms within the tested scale range $[0.80, 1.20]$; severe perspective skew, non-uniform aspect-ratio stretching, or heavy cropping/occlusion of the registration skein $T_0$ would require projective registration.
-  \item \textbf{Chromatic and quantization sensitivity:} Both the top-skein response map $M(x,y)$ and log-attenuation decoding assume calibrated RGB white balance and gamma, and 8-bit quantization introduces $\pm 1$ LSB rounding differences ($0.61\%$ of channels in TMG); physical print-and-photograph capture remains untested.
+  \item \textbf{Chromatic and quantization sensitivity:} Both the top-skein response map $M(x,y)$ and log-attenuation decoding assume calibrated RGB white balance and gamma, and 8-bit quantization introduces $\pm 1$ LSB rounding differences ($1.06\%$ of channels in TMG); physical print-and-photograph capture remains untested.
   \item \textbf{Seed dependence and security:} Opaque peeling and linear decoding depend on the chosen PRNG seeds and lack cryptographic secrecy unless $T_0$'s seed is kept private as a keyed watermark.
   \item \textbf{Precomputation cost:} Decoding precomputes $K$ prime stroke templates and $(G + 10^{-3}I)^{-1}$ once per keyset, scaling quadratically in $K$.
 \end{enumerate}
@@ -294,7 +295,7 @@ Several practical boundaries bound the current framework:
 Focusing on Jackson Pollock's drip-painting aesthetic demonstrates that visual number representations can bridge formal algebra and expressive art. While generative grammars (\emph{Separate Strokes} and \emph{Path Extent}) prioritize clear, layered silhouettes, Translucent Multiply Glazing (TMG) realizes an exact pixel-space commutative monoid homomorphism on continuous attenuation fields (with $\le 1$ LSB rounding in 8-bit RGB), and Toroidal Trajectory Sum (TTS) realizes an exact trajectory-space homomorphism on $[0,1)^2$. Across $1 \le n \le 120$, all four variants achieve $120/120$ uniqueness and blind factor recovery. Extending TMG to single-canvas message encoding with a keyed organic registration skein yields $64/64$ bit recovery in the \texttt{"MathArts"} demonstration and $99.74\%$--$99.76\%$ bit accuracy ($87.3\%$--$92.4\%$ exact uncoded messages) across $1{,}000$-trial Monte Carlo benchmarks under the tested RTS, JPEG, and noise regimes.
 
 \section*{Code and Data Availability}
-The complete Python implementation (\texttt{verify\_decomposition.py}, \texttt{pollock\_codec.py}), interactive HTML/Canvas explorer (\texttt{build\_explorer.py}, \texttt{explorer.html}), and figure-generation scripts are publicly available at \url{https://github.com/leolca/prime_visual_algebra}. All experiments were executed with Python~3.14.8, NumPy~2.4.6, and Pillow~12.3.0 on an Intel Core i7-13650HX CPU; \texttt{python3 verify\_decomposition.py} reproduces Table~\ref{tab:verification} and \texttt{python3 pollock\_codec.py} reproduces the \texttt{"MathArts"} demonstration.
+The complete Python implementation (\texttt{verify\_decomposition.py}, \texttt{pollock\_codec.py}), interactive HTML/Canvas/SVG explorer (\texttt{build\_explorer.py}, \texttt{explorer.html}, including the Text/Binary/Hex-to-Art codec tab), and figure-generation scripts are publicly available at \url{https://github.com/leolca/prime_visual_algebra}. All experiments were executed with Python~3.14.8, NumPy~2.4.6, and Pillow~12.3.0 on an Intel Core i7-13650HX CPU; \texttt{python3 verify\_decomposition.py} reproduces Table~\ref{tab:verification} and \texttt{python3 pollock\_codec.py} reproduces the \texttt{"MathArts"} demonstration.
 
 \section*{Disclosure Statement}
 The author reports there are no competing interests to declare.

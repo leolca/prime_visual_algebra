@@ -352,7 +352,11 @@
       <input id="codecShowSeedLabel" type="checkbox" />
       Stamp seed text
     </label>
-    <button class="btn-sm" id="btnCodecDownload" style="align-self:flex-end; padding:7px 14px;">Download PNG</button>
+    <div style="display:flex; gap:6px; align-self:flex-end; flex-wrap:wrap;">
+      <button class="btn-sm" id="btnCodecDownload" style="padding:7px 12px;">Download PNG</button>
+      <button class="btn-sm" id="btnCodecDownloadHiRes" style="padding:7px 12px;">High-Res PNG (2048px)</button>
+      <button class="btn-sm" id="btnCodecDownloadSvg" style="padding:7px 12px;">Download SVG</button>
+    </div>
   </div>
 
   <div class="controls" id="kleeControls" style="display:none;">
@@ -2966,18 +2970,8 @@ function primeColorCodec(idx, skeinColorHex = "#8b101c") {
   return hslToRgbArr(hue, sat, light);
 }
 
-function renderCodecStrokeMask(seed, size, steps, marginFrac, lwScale) {
+function computeCodecStrokePrimitives(seed, size, steps, marginFrac, lwScale) {
   const rand = mulberry32(seed >>> 0);
-  const off = document.createElement("canvas");
-  off.width = size;
-  off.height = size;
-  const ctx = off.getContext("2d");
-  ctx.clearRect(0, 0, size, size);
-  ctx.strokeStyle = "#ffffff";
-  ctx.fillStyle = "#ffffff";
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
   const margin = size * marginFrac;
   const span = size - 2 * margin;
   let x = margin + rand() * span;
@@ -2985,6 +2979,8 @@ function renderCodecStrokeMask(seed, size, steps, marginFrac, lwScale) {
   let angle = rand() * Math.PI * 2;
   let speed = size * (0.06 + rand() * 0.11);
 
+  const segments = [];
+  const droplets = [];
   for (let i = 0; i < steps; i++) {
     angle += (rand() - 0.5) * 1.9;
     speed = Math.max(size * 0.025, Math.min(size * 0.18, speed * (0.75 + rand() * 0.55)));
@@ -3001,76 +2997,48 @@ function renderCodecStrokeMask(seed, size, steps, marginFrac, lwScale) {
     const cx = (x + nx) / 2 + (rand() - 0.5) * speed * 0.45;
     const cy = (y + ny) / 2 + (rand() - 0.5) * speed * 0.45;
     const lw = Math.max(2, Math.round((1.15 - speed / (size * 0.18)) * size * lwScale));
-
-    ctx.lineWidth = lw;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(cx, cy, nx, ny);
-    ctx.stroke();
+    segments.push({ x, y, cx, cy, nx, ny, lw });
 
     if (rand() < 0.35) {
       const rr = lw * (0.6 + rand() * 0.9);
       const ox = nx + (rand() - 0.5) * lw * 1.6;
       const oy = ny + (rand() - 0.5) * lw * 1.6;
-      ctx.beginPath();
-      ctx.arc(ox, oy, rr, 0, Math.PI * 2);
-      ctx.fill();
+      droplets.push({ ox, oy, rr });
     }
     x = nx;
     y = ny;
   }
+  return { segments, droplets };
+}
+
+function renderCodecStrokeMask(seed, size, steps, marginFrac, lwScale) {
+  const off = document.createElement("canvas");
+  off.width = size;
+  off.height = size;
+  const ctx = off.getContext("2d");
+  ctx.clearRect(0, 0, size, size);
+  ctx.strokeStyle = "#ffffff";
+  ctx.fillStyle = "#ffffff";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  const { segments, droplets } = computeCodecStrokePrimitives(seed, size, steps, marginFrac, lwScale);
+  for (const s of segments) {
+    ctx.lineWidth = s.lw;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.quadraticCurveTo(s.cx, s.cy, s.nx, s.ny);
+    ctx.stroke();
+  }
+  for (const d of droplets) {
+    ctx.beginPath();
+    ctx.arc(d.ox, d.oy, d.rr, 0, Math.PI * 2);
+    ctx.fill();
+  }
   return ctx.getImageData(0, 0, size, size).data;
 }
 
-function parseCodecInput(format, raw) {
-  if (format === "bin") {
-    const clean = raw.replace(/\s+/g, "");
-    if (!/^[01]*$/.test(clean)) {
-      return { error: "Binary input may only contain 0, 1, and spaces.", bits: [], label: "Binary" };
-    }
-    const bits = Array.from(clean, ch => (ch === "1" ? 1 : 0));
-    return { error: null, bits, label: "Binary", clean };
-  }
-  if (format === "hex") {
-    const clean = raw.replace(/\s+/g, "").replace(/^0x/i, "");
-    if (!/^[0-9a-fA-F]*$/.test(clean)) {
-      return { error: "Hexadecimal input may only contain 0–9, A–F, and spaces.", bits: [], label: "Hex" };
-    }
-    const bits = [];
-    for (const ch of clean) {
-      const nib = parseInt(ch, 16);
-      for (let b = 3; b >= 0; b--) {
-        bits.push((nib >> b) & 1);
-      }
-    }
-    return { error: null, bits, label: "Hex", clean: clean.toUpperCase() };
-  }
-  const bytes = new TextEncoder().encode(raw);
-  const bits = [];
-  for (const byte of bytes) {
-    for (let b = 7; b >= 0; b--) {
-      bits.push((byte >> b) & 1);
-    }
-  }
-  return { error: null, bits, label: "UTF-8", bytes };
-}
-
-function renderCodecArt() {
-  const format = document.getElementById("codecFormat").value;
-  const text = document.getElementById("codecText").value;
-  const alpha = parseFloat(document.getElementById("codecAlpha").value);
-  const size = parseInt(document.getElementById("codecSize").value, 10);
-  const useTopSkein = document.getElementById("codecTopSkein").checked;
-  const seedRaw = document.getElementById("codecSkeinSeed").value;
-  const skeinSeed = parseSkeinSeed(seedRaw);
-  const skeinColorHex = document.getElementById("codecSkeinColor").value;
-  const skeinRgb = hexToRgbArr(skeinColorHex);
-  const showSeedLabel = document.getElementById("codecShowSeedLabel").checked;
-
-  const parsed = parseCodecInput(format, text);
-  const bits = parsed.bits;
-  const primes = getFirstKPrimes(bits.length);
-  const canvas = document.getElementById("codecCanvas");
+function renderCodecToCanvas(canvas, size, bits, primes, alpha, useTopSkein, skeinSeed, skeinRgb, skeinColorHex, showSeedLabel) {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
@@ -3133,6 +3101,129 @@ function renderCodecArt() {
     ctx.fillText(`T0: ${hexTag}`, size - Math.round(size * 0.025), size - Math.round(size * 0.02));
     ctx.restore();
   }
+  return onesCount;
+}
+
+function buildCodecSVG(size, bits, primes, alpha, useTopSkein, skeinSeed, skeinColorHex, showSeedLabel) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("xmlns", ns);
+  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+
+  const bg = document.createElementNS(ns, "rect");
+  bg.setAttribute("width", String(size));
+  bg.setAttribute("height", String(size));
+  bg.setAttribute("fill", "#f4efe6");
+  svg.appendChild(bg);
+
+  const appendStrokeGroup = (seed, steps, marginFrac, lwScale, colorStr, blendMultiply) => {
+    const g = document.createElementNS(ns, "g");
+    if (blendMultiply) g.setAttribute("style", "mix-blend-mode: multiply;");
+    const { segments, droplets } = computeCodecStrokePrimitives(seed, size, steps, marginFrac, lwScale);
+    for (const s of segments) {
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("d", `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} Q ${s.cx.toFixed(2)} ${s.cy.toFixed(2)} ${s.nx.toFixed(2)} ${s.ny.toFixed(2)}`);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", colorStr);
+      path.setAttribute("stroke-width", String(s.lw));
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      g.appendChild(path);
+    }
+    for (const d of droplets) {
+      const c = document.createElementNS(ns, "circle");
+      c.setAttribute("cx", d.ox.toFixed(2));
+      c.setAttribute("cy", d.oy.toFixed(2));
+      c.setAttribute("r", d.rr.toFixed(2));
+      c.setAttribute("fill", colorStr);
+      g.appendChild(c);
+    }
+    svg.appendChild(g);
+  };
+
+  for (let idx = 0; idx < bits.length; idx++) {
+    if (bits[idx] !== 1) continue;
+    const p = primes[idx];
+    const seed = (Math.imul(p, 2654435761) ^ 0x40503311) >>> 0;
+    const rgb = primeColorCodec(idx, skeinColorHex);
+    const rAtt = Math.round((1.0 - alpha) * 255 + alpha * rgb[0]);
+    const gAtt = Math.round((1.0 - alpha) * 255 + alpha * rgb[1]);
+    const bAtt = Math.round((1.0 - alpha) * 255 + alpha * rgb[2]);
+    appendStrokeGroup(seed, 28, 0.10, 0.022, `rgb(${rAtt},${gAtt},${bAtt})`, true);
+  }
+
+  if (useTopSkein) {
+    appendStrokeGroup(skeinSeed, 26, 0.12, 0.028, skeinColorHex, false);
+    if (showSeedLabel) {
+      const hexTag = "0x" + skeinSeed.toString(16).padStart(8, "0");
+      const txt = document.createElementNS(ns, "text");
+      txt.setAttribute("x", String(size - Math.round(size * 0.025)));
+      txt.setAttribute("y", String(size - Math.round(size * 0.02)));
+      txt.setAttribute("text-anchor", "end");
+      txt.setAttribute("fill", "rgba(40, 35, 30, 0.55)");
+      txt.setAttribute("font-family", "ui-monospace, Menlo, monospace");
+      txt.setAttribute("font-size", String(Math.max(10, Math.round(size * 0.022))));
+      txt.textContent = `T0: ${hexTag}`;
+      svg.appendChild(txt);
+    }
+  }
+  return svg;
+}
+
+function parseCodecInput(format, raw) {
+  if (format === "bin") {
+    const clean = raw.replace(/\s+/g, "");
+    if (!/^[01]*$/.test(clean)) {
+      return { error: "Binary input may only contain 0, 1, and spaces.", bits: [], label: "Binary" };
+    }
+    const bits = Array.from(clean, ch => (ch === "1" ? 1 : 0));
+    return { error: null, bits, label: "Binary", clean };
+  }
+  if (format === "hex") {
+    const clean = raw.replace(/\s+/g, "").replace(/^0x/i, "");
+    if (!/^[0-9a-fA-F]*$/.test(clean)) {
+      return { error: "Hexadecimal input may only contain 0–9, A–F, and spaces.", bits: [], label: "Hex" };
+    }
+    const bits = [];
+    for (const ch of clean) {
+      const nib = parseInt(ch, 16);
+      for (let b = 3; b >= 0; b--) {
+        bits.push((nib >> b) & 1);
+      }
+    }
+    return { error: null, bits, label: "Hex", clean: clean.toUpperCase() };
+  }
+  const bytes = new TextEncoder().encode(raw);
+  const bits = [];
+  for (const byte of bytes) {
+    for (let b = 7; b >= 0; b--) {
+      bits.push((byte >> b) & 1);
+    }
+  }
+  return { error: null, bits, label: "UTF-8", bytes };
+}
+
+function renderCodecArt() {
+  const format = document.getElementById("codecFormat").value;
+  const text = document.getElementById("codecText").value;
+  const alpha = parseFloat(document.getElementById("codecAlpha").value);
+  const size = parseInt(document.getElementById("codecSize").value, 10);
+  const useTopSkein = document.getElementById("codecTopSkein").checked;
+  const seedRaw = document.getElementById("codecSkeinSeed").value;
+  const skeinSeed = parseSkeinSeed(seedRaw);
+  const skeinColorHex = document.getElementById("codecSkeinColor").value;
+  const skeinRgb = hexToRgbArr(skeinColorHex);
+  const showSeedLabel = document.getElementById("codecShowSeedLabel").checked;
+
+  const parsed = parseCodecInput(format, text);
+  const bits = parsed.bits;
+  const primes = getFirstKPrimes(bits.length);
+  const canvas = document.getElementById("codecCanvas");
+  const onesCount = renderCodecToCanvas(
+    canvas, size, bits, primes, alpha, useTopSkein, skeinSeed, skeinRgb, skeinColorHex, showSeedLabel
+  );
 
   const safeTitle = text.length > 0 ? text : "(empty)";
   document.getElementById("codecTitle").textContent = `Single-Canvas Pollock Codec (${parsed.label}): "${safeTitle}"`;
@@ -3275,13 +3366,59 @@ document.getElementById("btnCodecRandomSeed").addEventListener("click", () => {
 ["codecAlpha", "codecSize", "codecTopSkein", "codecSkeinColor", "codecShowSeedLabel"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderCodecArt);
 });
+function getCodecSlug() {
+  const raw = document.getElementById("codecText").value || "empty";
+  return raw.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 24) || "text";
+}
+
 document.getElementById("btnCodecDownload").addEventListener("click", () => {
   const canvas = document.getElementById("codecCanvas");
-  const raw = document.getElementById("codecText").value || "empty";
-  const slug = raw.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 24) || "text";
   canvas.toBlob(blob => {
-    if (blob) triggerDownload(blob, `pollock_codec_${slug}.png`);
+    if (blob) triggerDownload(blob, `pollock_codec_${getCodecSlug()}.png`);
   }, "image/png");
+});
+
+document.getElementById("btnCodecDownloadHiRes").addEventListener("click", () => {
+  const format = document.getElementById("codecFormat").value;
+  const text = document.getElementById("codecText").value;
+  const parsed = parseCodecInput(format, text);
+  if (parsed.error) return;
+  const bits = parsed.bits;
+  const primes = getFirstKPrimes(bits.length);
+  const alpha = parseFloat(document.getElementById("codecAlpha").value);
+  const useTopSkein = document.getElementById("codecTopSkein").checked;
+  const skeinSeed = parseSkeinSeed(document.getElementById("codecSkeinSeed").value);
+  const skeinColorHex = document.getElementById("codecSkeinColor").value;
+  const skeinRgb = hexToRgbArr(skeinColorHex);
+  const showSeedLabel = document.getElementById("codecShowSeedLabel").checked;
+
+  const hiRes = document.createElement("canvas");
+  renderCodecToCanvas(
+    hiRes, 2048, bits, primes, alpha, useTopSkein, skeinSeed, skeinRgb, skeinColorHex, showSeedLabel
+  );
+  hiRes.toBlob(blob => {
+    if (blob) triggerDownload(blob, `pollock_codec_${getCodecSlug()}_2048px.png`);
+  }, "image/png");
+});
+
+document.getElementById("btnCodecDownloadSvg").addEventListener("click", () => {
+  const format = document.getElementById("codecFormat").value;
+  const text = document.getElementById("codecText").value;
+  const parsed = parseCodecInput(format, text);
+  if (parsed.error) return;
+  const bits = parsed.bits;
+  const primes = getFirstKPrimes(bits.length);
+  const alpha = parseFloat(document.getElementById("codecAlpha").value);
+  const size = parseInt(document.getElementById("codecSize").value, 10);
+  const useTopSkein = document.getElementById("codecTopSkein").checked;
+  const skeinSeed = parseSkeinSeed(document.getElementById("codecSkeinSeed").value);
+  const skeinColorHex = document.getElementById("codecSkeinColor").value;
+  const showSeedLabel = document.getElementById("codecShowSeedLabel").checked;
+
+  const svg = buildCodecSVG(size, bits, primes, alpha, useTopSkein, skeinSeed, skeinColorHex, showSeedLabel);
+  const str = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob([str], { type: "image/svg+xml;charset=utf-8" });
+  triggerDownload(blob, `pollock_codec_${getCodecSlug()}.svg`);
 });
 
 function triggerDownload(blob, filename) {

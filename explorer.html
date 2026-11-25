@@ -299,9 +299,17 @@
   </div>
 
   <div class="controls" id="codecControls" style="display:none;">
-    <div class="control-group" style="min-width:220px;">
-      <label for="codecText">Text to Encode (UTF-8)</label>
-      <input id="codecText" type="text" value="MathArts" maxlength="32" placeholder="Enter text..." style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px;" />
+    <div class="control-group">
+      <label for="codecFormat">Input Format</label>
+      <select id="codecFormat">
+        <option value="utf8" selected>Text (UTF-8)</option>
+        <option value="bin">Binary (0 / 1)</option>
+        <option value="hex">Hexadecimal (0–F)</option>
+      </select>
+    </div>
+    <div class="control-group" style="min-width:240px;">
+      <label for="codecText" id="codecInputLabel">Text to Encode (UTF-8)</label>
+      <input id="codecText" type="text" value="MathArts" maxlength="256" placeholder="Enter text..." style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px;" />
     </div>
     <div class="control-group">
       <label for="codecAlpha">Glaze Opacity (&alpha;)</label>
@@ -3014,7 +3022,41 @@ function renderCodecStrokeMask(seed, size, steps, marginFrac, lwScale) {
   return ctx.getImageData(0, 0, size, size).data;
 }
 
+function parseCodecInput(format, raw) {
+  if (format === "bin") {
+    const clean = raw.replace(/\s+/g, "");
+    if (!/^[01]*$/.test(clean)) {
+      return { error: "Binary input may only contain 0, 1, and spaces.", bits: [], label: "Binary" };
+    }
+    const bits = Array.from(clean, ch => (ch === "1" ? 1 : 0));
+    return { error: null, bits, label: "Binary", clean };
+  }
+  if (format === "hex") {
+    const clean = raw.replace(/\s+/g, "").replace(/^0x/i, "");
+    if (!/^[0-9a-fA-F]*$/.test(clean)) {
+      return { error: "Hexadecimal input may only contain 0–9, A–F, and spaces.", bits: [], label: "Hex" };
+    }
+    const bits = [];
+    for (const ch of clean) {
+      const nib = parseInt(ch, 16);
+      for (let b = 3; b >= 0; b--) {
+        bits.push((nib >> b) & 1);
+      }
+    }
+    return { error: null, bits, label: "Hex", clean: clean.toUpperCase() };
+  }
+  const bytes = new TextEncoder().encode(raw);
+  const bits = [];
+  for (const byte of bytes) {
+    for (let b = 7; b >= 0; b--) {
+      bits.push((byte >> b) & 1);
+    }
+  }
+  return { error: null, bits, label: "UTF-8", bytes };
+}
+
 function renderCodecArt() {
+  const format = document.getElementById("codecFormat").value;
   const text = document.getElementById("codecText").value;
   const alpha = parseFloat(document.getElementById("codecAlpha").value);
   const size = parseInt(document.getElementById("codecSize").value, 10);
@@ -3025,14 +3067,8 @@ function renderCodecArt() {
   const skeinRgb = hexToRgbArr(skeinColorHex);
   const showSeedLabel = document.getElementById("codecShowSeedLabel").checked;
 
-  const bytes = new TextEncoder().encode(text);
-  const bits = [];
-  for (const byte of bytes) {
-    for (let b = 7; b >= 0; b--) {
-      bits.push((byte >> b) & 1);
-    }
-  }
-
+  const parsed = parseCodecInput(format, text);
+  const bits = parsed.bits;
   const primes = getFirstKPrimes(bits.length);
   const canvas = document.getElementById("codecCanvas");
   canvas.width = size;
@@ -3099,18 +3135,30 @@ function renderCodecArt() {
   }
 
   const safeTitle = text.length > 0 ? text : "(empty)";
-  document.getElementById("codecTitle").textContent = `Single-Canvas Pollock Codec: "${safeTitle}"`;
-  const primeSpan = primes.length > 0 ? `2..${primes[primes.length - 1]}` : "none";
-  document.getElementById("codecStats").textContent =
-    `${bytes.length} bytes · ${bits.length} bits (${onesCount} active strokes) · primes ${primeSpan}`;
-
+  document.getElementById("codecTitle").textContent = `Single-Canvas Pollock Codec (${parsed.label}): "${safeTitle}"`;
   const breakdownEl = document.getElementById("codecBreakdown");
-  if (bytes.length === 0) {
-    breakdownEl.innerHTML = "<span style='color:var(--muted);'>Enter text above to encode UTF-8 bits as prime-indexed Pollock glazes.</span>";
-  } else {
+
+  if (parsed.error) {
+    document.getElementById("codecStats").textContent = "Invalid input";
+    breakdownEl.innerHTML = `<span style='color:#b91c1c; font-weight:600;'>${parsed.error}</span>`;
+    return;
+  }
+
+  const primeSpan = primes.length > 0 ? `2..${primes[primes.length - 1]}` : "none";
+  const byteSummary = format === "utf8"
+    ? `${parsed.bytes.length} bytes · `
+    : format === "hex"
+    ? `${(bits.length / 8).toFixed(bits.length % 8 === 0 ? 0 : 1)} bytes · `
+    : "";
+  document.getElementById("codecStats").textContent =
+    `${byteSummary}${bits.length} bits (${onesCount} active strokes) · primes ${primeSpan}`;
+
+  if (bits.length === 0) {
+    breakdownEl.innerHTML = "<span style='color:var(--muted);'>Enter text, binary, or hex above to encode bits as prime-indexed Pollock glazes.</span>";
+  } else if (format === "utf8") {
     const lines = [];
-    for (let bi = 0; bi < bytes.length; bi++) {
-      const bVal = bytes[bi];
+    for (let bi = 0; bi < parsed.bytes.length; bi++) {
+      const bVal = parsed.bytes[bi];
       const ch = (bVal >= 32 && bVal <= 126) ? String.fromCharCode(bVal) : `0x${bVal.toString(16).padStart(2, "0")}`;
       const bStr = bVal.toString(2).padStart(8, "0");
       const activePs = [];
@@ -3118,6 +3166,32 @@ function renderCodecArt() {
         if (bStr[k] === "1") activePs.push(primes[bi * 8 + k]);
       }
       lines.push(`<div><strong>${ch.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</strong> (${bStr}) &rarr; primes [${activePs.join(", ") || "none"}]</div>`);
+    }
+    breakdownEl.innerHTML = lines.join("");
+  } else if (format === "hex") {
+    const lines = [];
+    for (let i = 0; i < parsed.clean.length; i += 2) {
+      const chunk = parsed.clean.slice(i, i + 2);
+      const bitStart = i * 4;
+      const bitEnd = Math.min(bits.length, bitStart + chunk.length * 4);
+      const bStr = bits.slice(bitStart, bitEnd).join("");
+      const activePs = [];
+      for (let k = bitStart; k < bitEnd; k++) {
+        if (bits[k] === 1) activePs.push(primes[k]);
+      }
+      lines.push(`<div><strong>0x${chunk}</strong> (${bStr}) &rarr; primes [${activePs.join(", ") || "none"}]</div>`);
+    }
+    breakdownEl.innerHTML = lines.join("");
+  } else {
+    const lines = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      const slice = bits.slice(i, i + 8);
+      const bStr = slice.join("");
+      const activePs = [];
+      for (let k = 0; k < slice.length; k++) {
+        if (slice[k] === 1) activePs.push(primes[i + k]);
+      }
+      lines.push(`<div><strong>bits[${i}..${i + slice.length - 1}]</strong> (${bStr}) &rarr; primes [${activePs.join(", ") || "none"}]</div>`);
     }
     breakdownEl.innerHTML = lines.join("");
   }
@@ -3166,6 +3240,31 @@ document.getElementById("tabPollock").addEventListener("click", () => setMode("p
 document.getElementById("tabKlee").addEventListener("click", () => setMode("klee"));
 document.getElementById("tabKandinsky").addEventListener("click", () => setMode("kandinsky"));
 document.getElementById("tabCodec").addEventListener("click", () => setMode("codec"));
+document.getElementById("codecFormat").addEventListener("change", () => {
+  const fmt = document.getElementById("codecFormat").value;
+  const lbl = document.getElementById("codecInputLabel");
+  const inp = document.getElementById("codecText");
+  if (fmt === "bin") {
+    lbl.textContent = "Binary to Encode (0 / 1)";
+    inp.placeholder = "e.g. 10110010 01011100";
+    if (inp.value === "MathArts" || /^[0-9a-fA-F]+$/.test(inp.value.replace(/^0x/i, ""))) {
+      if (inp.value === "MathArts") inp.value = "01001101 01100001";
+    }
+  } else if (fmt === "hex") {
+    lbl.textContent = "Hexadecimal to Encode (0–F)";
+    inp.placeholder = "e.g. 4D61746841727473";
+    if (inp.value === "MathArts" || /^[01\s]+$/.test(inp.value)) {
+      inp.value = "4D61746841727473";
+    }
+  } else {
+    lbl.textContent = "Text to Encode (UTF-8)";
+    inp.placeholder = "Enter text...";
+    if (inp.value === "01001101 01100001" || inp.value === "4D61746841727473") {
+      inp.value = "MathArts";
+    }
+  }
+  renderCodecArt();
+});
 document.getElementById("codecText").addEventListener("input", renderCodecArt);
 document.getElementById("codecSkeinSeed").addEventListener("input", renderCodecArt);
 document.getElementById("btnCodecRandomSeed").addEventListener("click", () => {

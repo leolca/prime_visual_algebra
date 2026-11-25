@@ -171,7 +171,8 @@ def apply_rts_distortion(
     cx, cy = rotated.width / 2 - shift[0], rotated.height / 2 - shift[1]
     left = int(round(cx - (w + 2 * pad) / 2))
     top = int(round(cy - (h + 2 * pad) / 2))
-    out = rotated.crop((left, top, left + w + 2 * pad, top + h + 2 * pad))
+    out = Image.new("RGB", (w + 2 * pad, h + 2 * pad), bg_tuple)
+    out.paste(rotated, (-left, -top))
 
     if noise_std > 0:
         rng = np.random.default_rng(seed)
@@ -360,7 +361,14 @@ def align_image_organic(
     c = cx_src - (a * cx_dst + b * cy_dst)
     d, e = -sc * sin_a, sc * cos_a
     f = cy_src - (d * cx_dst + e * cy_dst)
-    coarse = distorted.transform((target_size, target_size), Image.Transform.AFFINE, (a, b, c, d, e, f), resample=Image.Resampling.BILINEAR)
+    bg_tuple = tuple(int(v) for v in BG_RGB)
+    coarse = distorted.transform(
+        (target_size, target_size),
+        Image.Transform.AFFINE,
+        (a, b, c, d, e, f),
+        resample=Image.Resampling.BILINEAR,
+        fillcolor=bg_tuple,
+    )
 
     coarse_score = extract_base_pour_score(np.array(coarse), skein_color=skein_color)
     cc_full = np.real(np.fft.ifft2(np.fft.fft2(coarse_score) * np.conj(np.fft.fft2(ref_mask.astype(np.float32)))))
@@ -368,7 +376,13 @@ def align_image_organic(
     fy = float(iy if iy <= target_size // 2 else iy - target_size)
     fx = float(ix if ix <= target_size // 2 else ix - target_size)
     if abs(fx) <= 24 and abs(fy) <= 24:
-        coarse = coarse.transform((target_size, target_size), Image.Transform.AFFINE, (1, 0, fx, 0, 1, fy), resample=Image.Resampling.BILINEAR)
+        coarse = coarse.transform(
+            (target_size, target_size),
+            Image.Transform.AFFINE,
+            (1, 0, fx, 0, 1, fy),
+            resample=Image.Resampling.BILINEAR,
+            fillcolor=bg_tuple,
+        )
         dx += fx * sc * cos_a + fy * sc * sin_a
         dy += -fx * sc * sin_a + fy * sc * cos_a
     if return_meta:

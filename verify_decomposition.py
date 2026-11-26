@@ -489,7 +489,7 @@ def render_pollock_layer(p: int, k: int, size: int = 100, steps: int = 32) -> Tu
         p_pool = 0.58 - 0.40 * u_t
         p_spray = 0.08 + 0.34 * u_t
         if rand() < p_pool:
-            rr = lw * (0.6 + rand() * 1.1)
+            rr = lw * (0.5 + rand() * 0.65)
             ox = nx + (rand() - 0.5) * lw * 1.8
             oy = ny + (rand() - 0.5) * lw * 1.8
             draw.ellipse([ox - rr, oy - rr, ox + rr, oy + rr], fill=(*color, 209))

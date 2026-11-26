@@ -86,9 +86,23 @@ def render_pollock_variant(variant: str, n: int, size: int = 180) -> np.ndarray:
         margin = size * 0.06
         span = size - 2 * margin
         pts = [(margin + (((0.5 + x) % 1.0) * span), margin + (((0.5 + y) % 1.0) * span)) for x, y in gamma]
+        rand_drip = mulberry32(1234567)
         for i in range(len(pts) - 1):
-            if math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) <= span * 0.45:
-                draw.line([pts[i], pts[i + 1]], fill=col, width=max(2, size // 64))
+            dist = math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
+            if dist <= span * 0.45:
+                u_sp = min(1.0, dist / (size * 0.10))
+                lw = max(1, int(round((1.15 - u_sp) * (size * 0.036))))
+                draw.line([pts[i], pts[i + 1]], fill=col, width=lw)
+                if rand_drip() < 0.35 - 0.28 * u_sp:
+                    rr = max(1.0, lw * (0.55 + rand_drip() * 0.45))
+                    ox, oy = pts[i + 1][0] + (rand_drip() - 0.5) * lw, pts[i + 1][1] + (rand_drip() - 0.5) * lw
+                    draw.ellipse([ox - rr, oy - rr, ox + rr, oy + rr], fill=col)
+                if rand_drip() < 0.05 + 0.22 * u_sp:
+                    for _ in range(1 + int(rand_drip() * 2)):
+                        sx = pts[i + 1][0] + (rand_drip() - 0.5) * size * 0.12
+                        sy = pts[i + 1][1] + (rand_drip() - 0.5) * size * 0.12
+                        sr = max(0.5, size * (0.004 + rand_drip() * 0.008))
+                        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=col)
     return np.array(img)
 
 

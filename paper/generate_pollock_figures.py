@@ -61,8 +61,10 @@ def render_pollock_variant(variant: str, n: int, size: int = 180) -> np.ndarray:
             att *= (a_p ** e)
         return np.clip(np.round(BG_F * att), 0, 255).astype(np.uint8)
 
-    # trajectory
-    num_pts = 360
+    # trajectory (4x supersampled RGBA with 0.88 alpha to match explorer anti-aliased ribbons)
+    ss = 4
+    w_ss = size * ss
+    num_pts = 240
     ts = np.linspace(0.0, 1.0, num_pts + 1)
     gamma = np.zeros((num_pts + 1, 2), dtype=np.float64)
     for p, e in facs.items():
@@ -76,37 +78,31 @@ def render_pollock_variant(variant: str, n: int, size: int = 180) -> np.ndarray:
             gamma[:, 0] += e * ax * np.cos(2 * math.pi * fx * ts + px)
             gamma[:, 1] += e * ay * np.sin(2 * math.pi * fy * ts + py)
 
-    img = Image.new("RGB", (size, size), tuple(int(v) for v in BG))
-    draw = ImageDraw.Draw(img)
+    img = Image.new("RGBA", (w_ss, w_ss), (*tuple(int(v) for v in BG), 255))
     if facs:
         sx = sum(e * math.cos(math.radians((PRIME_INDEX[p] * 137.508 + 18) % 360)) for p, e in facs.items())
         sy = sum(e * math.sin(math.radians((PRIME_INDEX[p] * 137.508 + 18) % 360)) for p, e in facs.items())
         hue = (math.degrees(math.atan2(sy, sx)) + 360) % 360
         col = hsl_to_rgb(hue, 74.0, 40.0)
-        margin = size * 0.06
-        span = size - 2 * margin
+        margin = w_ss * 0.06
+        span = w_ss - 2 * margin
         pts = [(margin + (((0.5 + x) % 1.0) * span), margin + (((0.5 + y) % 1.0) * span)) for x, y in gamma]
         rand_drip = mulberry32(1234567)
+        overlay = Image.new("RGBA", (w_ss, w_ss), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
         for i in range(len(pts) - 1):
             dist = math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
             if dist <= span * 0.45:
-                u_sp = min(1.0, dist / (size * 0.022))
-                lw = max(1, int(round((1.15 - u_sp) * (size * 0.036))))
-                draw.line([pts[i], pts[i + 1]], fill=col, width=lw)
-                if lw >= 3:
-                    rj = lw * 0.48
-                    draw.ellipse([pts[i][0] - rj, pts[i][1] - rj, pts[i][0] + rj, pts[i][1] + rj], fill=col)
-                if rand_drip() < (0.35 - 0.28 * u_sp) * 0.22:
-                    rr = max(1.0, lw * (0.55 + rand_drip() * 0.45))
-                    ox, oy = pts[i + 1][0] + (rand_drip() - 0.5) * lw, pts[i + 1][1] + (rand_drip() - 0.5) * lw
-                    draw.ellipse([ox - rr, oy - rr, ox + rr, oy + rr], fill=col)
-                if rand_drip() < (0.05 + 0.22 * u_sp) * 0.22:
-                    for _ in range(1 + int(rand_drip() * 2)):
-                        sx = pts[i + 1][0] + (rand_drip() - 0.5) * size * 0.12
-                        sy = pts[i + 1][1] + (rand_drip() - 0.5) * size * 0.12
-                        sr = max(0.5, size * (0.004 + rand_drip() * 0.008))
-                        draw.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=col)
-    return np.array(img)
+                u_sp = min(1.0, dist / (w_ss * 0.032))
+                lw = max(2, int(round((1.15 - u_sp) * (w_ss * 0.036))))
+                draw.line([pts[i], pts[i + 1]], fill=(*col, 224), width=lw)
+                rj = lw * 0.48
+                draw.ellipse([pts[i][0] - rj, pts[i][1] - rj, pts[i][0] + rj, pts[i][1] + rj], fill=(*col, 224))
+                if rand_drip() < 0.06:
+                    rr = lw * 0.75
+                    draw.ellipse([pts[i + 1][0] - rr, pts[i + 1][1] - rr, pts[i + 1][0] + rr, pts[i + 1][1] + rr], fill=(*col, 204))
+        img = Image.alpha_composite(img, overlay)
+    return np.array(img.convert("RGB").resize((size, size), Image.Resampling.LANCZOS))
 
 
 def fig1_pollock_modes() -> None:

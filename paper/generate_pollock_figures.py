@@ -112,7 +112,7 @@ def fig1_pollock_modes() -> None:
             if r == 0:
                 ax.set_title(f"$n={n}$\n({format_fac(n)})", fontsize=9, fontweight="bold")
             if c == 0:
-                ax.set_ylabel(label, fontsize=8.5, fontweight="bold", rotation=0, labelpad=48, va="center")
+                ax.set_ylabel(label, fontsize=8.5, fontweight="bold", rotation=0, labelpad=10, va="center", ha="right")
     plt.tight_layout(h_pad=0.6, w_pad=0.5)
     fig.savefig(FIG_DIR / "fig1_pollock_modes.pdf", bbox_inches="tight", dpi=300)
     plt.close(fig)
@@ -122,8 +122,8 @@ def fig2_pollock_homomorphism() -> None:
     fig, axes = plt.subplots(2, 3, figsize=(7.5, 4.8))
     fig.patch.set_facecolor("white")
     pairs = [
-        ("glaze", "Translucent Multiply Glazing:\n$I(6) \\star I(10) = I(60)$"),
-        ("trajectory", "Toroidal Trajectory Sum:\n$\\gamma(6) + \\gamma(10) \\equiv \\gamma(60)$"),
+        ("glaze", "Translucent\nMultiply Glazing:\n$I(6) \\star I(10) = I(60)$"),
+        ("trajectory", "Toroidal\nTrajectory Sum:\n$\\gamma(6) + \\gamma(10) \\equiv \\gamma(60)$"),
     ]
     nums = [6, 10, 60]
     for r, (v, label) in enumerate(pairs):
@@ -133,10 +133,9 @@ def fig2_pollock_homomorphism() -> None:
             ax.set_xticks([]); ax.set_yticks([])
             for sp in ax.spines.values():
                 sp.set_edgecolor("#bbbbbb"); sp.set_linewidth(0.7)
-            sym = "=" if c == 2 else ("$\\star$" if c == 0 else "")
             ax.set_title(f"$n={n}$ ({format_fac(n)})", fontsize=9, fontweight="bold")
             if c == 0:
-                ax.set_ylabel(label, fontsize=8.5, fontweight="bold", rotation=0, labelpad=58, va="center")
+                ax.set_ylabel(label, fontsize=8.5, fontweight="bold", rotation=0, labelpad=10, va="center", ha="right")
     plt.tight_layout(h_pad=0.8, w_pad=0.8)
     fig.savefig(FIG_DIR / "fig2_pollock_homomorphism.pdf", bbox_inches="tight", dpi=300)
     plt.close(fig)

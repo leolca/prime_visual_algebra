@@ -397,7 +397,7 @@ def build_log_decoder(
     skein_seed: int = 0x20261124,
     skein_color: str = BASE_POUR_HEX,
 ):
-    """Precompute Gram inverse G_inv and per-prime log-attenuation vectors for linear decoding."""
+    """Precompute regularized Gram matrix G_reg and per-prime log-attenuation vectors for linear decoding."""
     primes = get_first_k_primes(n_bits)
     base_mask = render_base_pour_mask(size=size, skein_seed=skein_seed)
     l_vecs = []
@@ -415,8 +415,8 @@ def build_log_decoder(
             ov = int(np.sum(mi & mj))
             if ov > 0:
                 G[i, j] = G[j, i] = ov * float(np.dot(li, lj))
-    G_inv = np.linalg.inv(G + 1e-3 * np.eye(n_bits))
-    return l_vecs, G_inv
+    G_reg = G + 1e-3 * np.eye(n_bits)
+    return l_vecs, G_reg
 
 
 def decode_bits_pollock(
@@ -430,7 +430,7 @@ def decode_bits_pollock(
     return_meta: bool = False,
 ):
     """Decode n_bits from a distorted Pollock canvas using Fourier-Mellin alignment + log-attenuation solver."""
-    l_vecs, G_inv = precomp if precomp is not None else build_log_decoder(
+    l_vecs, G_reg = precomp if precomp is not None else build_log_decoder(
         n_bits, size=size, alpha=alpha, skein_seed=skein_seed, skein_color=skein_color
     )
     aligned, reg_meta = align_image_organic(
@@ -440,7 +440,7 @@ def decode_bits_pollock(
     res = np.clip(arr / BG_RGB, 1e-3, 1.0)
     L_obs = -np.log(res)
     y = np.array([float(np.sum(L_obs[mi] @ li)) for mi, li in l_vecs], dtype=np.float64)
-    b_hat = G_inv @ y
+    b_hat = np.linalg.solve(G_reg, y)
     bits = [1 if v >= 0.5 else 0 for v in b_hat]
     if return_meta:
         return bits, reg_meta, b_hat

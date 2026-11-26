@@ -37,29 +37,39 @@ def format_fac(n: int) -> str:
 
 def render_pollock_variant(variant: str, n: int, size: int = 180) -> np.ndarray:
     facs = factorize(n)
-    if variant == "separate":
-        canvas = np.broadcast_to(BG, (size, size, 3)).copy()
-        for p in sorted(facs.keys()):
-            for k in range(1, facs[p] + 1):
-                rgb, mask = render_pollock_layer(p, k, size=size, steps=32)
-                canvas[mask] = rgb[mask]
-        return canvas
-    if variant == "extent":
-        canvas = np.broadcast_to(BG, (size, size, 3)).copy()
-        for p in sorted(facs.keys()):
-            rgb, mask = render_pollock_layer(p, 1, size=size, steps=32 * facs[p])
-            canvas[mask] = rgb[mask]
-        return canvas
-    if variant == "glaze":
+    if variant in ("separate", "extent", "glaze"):
+        ss = 4
+        w_ss = size * ss
+        if variant == "separate":
+            canvas = Image.new("RGBA", (w_ss, w_ss), (*tuple(int(v) for v in BG), 255))
+            for p in sorted(facs.keys()):
+                for k in range(1, facs[p] + 1):
+                    rgb, mask = render_pollock_layer(p, k, size=w_ss, steps=32)
+                    layer = np.zeros((w_ss, w_ss, 4), dtype=np.uint8)
+                    layer[mask, :3] = rgb[mask]
+                    layer[mask, 3] = 224
+                    canvas = Image.alpha_composite(canvas, Image.fromarray(layer))
+            return np.array(canvas.convert("RGB").resize((size, size), Image.Resampling.LANCZOS))
+        if variant == "extent":
+            canvas = Image.new("RGBA", (w_ss, w_ss), (*tuple(int(v) for v in BG), 255))
+            for p in sorted(facs.keys()):
+                rgb, mask = render_pollock_layer(p, 1, size=w_ss, steps=32 * facs[p])
+                layer = np.zeros((w_ss, w_ss, 4), dtype=np.uint8)
+                layer[mask, :3] = rgb[mask]
+                layer[mask, 3] = 224
+                canvas = Image.alpha_composite(canvas, Image.fromarray(layer))
+            return np.array(canvas.convert("RGB").resize((size, size), Image.Resampling.LANCZOS))
+        # glaze
         alpha = 0.45 * 0.88
-        att = np.ones((size, size, 3), dtype=np.float32)
+        att = np.ones((w_ss, w_ss, 3), dtype=np.float32)
         for p, e in sorted(facs.items()):
-            rgb, mask = render_pollock_layer(p, 1, size=size, steps=32)
+            rgb, mask = render_pollock_layer(p, 1, size=w_ss, steps=32)
             col = rgb.astype(np.float32) / 255.0
-            a_p = np.ones((size, size, 3), dtype=np.float32)
+            a_p = np.ones((w_ss, w_ss, 3), dtype=np.float32)
             a_p[mask] = (1.0 - alpha) + alpha * col[mask]
             att *= (a_p ** e)
-        return np.clip(np.round(BG_F * att), 0, 255).astype(np.uint8)
+        hi = Image.fromarray(np.clip(np.round(BG_F * att), 0, 255).astype(np.uint8))
+        return np.array(hi.resize((size, size), Image.Resampling.LANCZOS))
 
     # trajectory (4x supersampled RGBA with 0.88 alpha to match explorer anti-aliased ribbons)
     ss = 4

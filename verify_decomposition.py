@@ -501,7 +501,14 @@ def render_pollock_layer(p: int, k: int, size: int = 100, steps: int = 32) -> Tu
         cx = (x + nx) / 2 + (rand() - 0.5) * speed * 0.45
         cy = (y + ny) / 2 + (rand() - 0.5) * speed * 0.45
         lw = max(1, int(round((1.15 - speed / (size * 0.25)) * size * 0.048)))
-        draw.line([(x, y), (cx, cy), (nx, ny)], fill=(*color, 224), width=lw)
+        q_pts = [
+            (
+                (1 - u) ** 2 * x + 2 * (1 - u) * u * cx + u ** 2 * nx,
+                (1 - u) ** 2 * y + 2 * (1 - u) * u * cy + u ** 2 * ny,
+            )
+            for u in (k_s / 10.0 for k_s in range(11))
+        ]
+        draw.line(q_pts, fill=(*color, 224), width=lw)
         u_t = max(0.0, min(1.0, (speed - size * 0.03) / (size * 0.22)))
         p_pool = 0.58 - 0.40 * u_t
         p_spray = 0.08 + 0.34 * u_t

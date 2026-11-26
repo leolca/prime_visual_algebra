@@ -485,12 +485,15 @@ def render_pollock_layer(p: int, k: int, size: int = 100, steps: int = 32) -> Tu
         cy = (y + ny) / 2 + (rand() - 0.5) * speed * 0.45
         lw = max(1, int(round((1.15 - speed / (size * 0.25)) * size * 0.048)))
         draw.line([(x, y), (cx, cy), (nx, ny)], fill=(*color, 224), width=lw)
-        if rand() < 0.38:
+        u_t = max(0.0, min(1.0, (speed - size * 0.03) / (size * 0.22)))
+        p_pool = 0.58 - 0.40 * u_t
+        p_spray = 0.08 + 0.34 * u_t
+        if rand() < p_pool:
             rr = lw * (0.6 + rand() * 1.1)
             ox = nx + (rand() - 0.5) * lw * 1.8
             oy = ny + (rand() - 0.5) * lw * 1.8
             draw.ellipse([ox - rr, oy - rr, ox + rr, oy + rr], fill=(*color, 209))
-        if rand() < 0.25:
+        if rand() < p_spray:
             for _ in range(1 + int(rand() * 3)):
                 sx = nx + (rand() - 0.5) * size * 0.18
                 sy = ny + (rand() - 0.5) * size * 0.18

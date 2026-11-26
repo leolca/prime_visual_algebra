@@ -689,10 +689,13 @@ function generatePollockPrimitives(p, occurrence, sizePx, steps, isDarkBg) {
     const cy = (y + ny) / 2 + (rand() - 0.5) * speed * 0.45;
     const normSpeed = speed / (sizePx * 0.25);
     const lw = Math.max(0.7, (1.15 - normSpeed) * (sizePx * 0.048));
+    const uSpeed = Math.max(0, Math.min(1, (speed - sizePx * 0.03) / (sizePx * 0.22)));
+    const pPool = 0.58 - 0.40 * uSpeed;
+    const pSpray = 0.08 + 0.34 * uSpeed;
 
     curves.push({ x, y, cx, cy, nx, ny, lw, alpha: 0.88 });
 
-    if (rand() < 0.38) {
+    if (rand() < pPool) {
       const r = lw * (0.6 + rand() * 1.1);
       dots.push({
         x: nx + (rand() - 0.5) * lw * 1.8,
@@ -701,7 +704,7 @@ function generatePollockPrimitives(p, occurrence, sizePx, steps, isDarkBg) {
         alpha: 0.82
       });
     }
-    if (rand() < 0.25) {
+    if (rand() < pSpray) {
       const sprayCount = 1 + Math.floor(rand() * 3);
       for (let s = 0; s < sprayCount; s++) {
         dots.push({

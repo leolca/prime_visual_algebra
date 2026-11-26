@@ -508,7 +508,10 @@ def render_pollock_layer(p: int, k: int, size: int = 100, steps: int = 32) -> Tu
             )
             for u in (k_s / 10.0 for k_s in range(11))
         ]
-        draw.line(q_pts, fill=(*color, 224), width=lw)
+        draw.line(q_pts, fill=(*color, 224), width=lw, joint="curve")
+        rc = lw * 0.48
+        draw.ellipse([x - rc, y - rc, x + rc, y + rc], fill=(*color, 224))
+        draw.ellipse([nx - rc, ny - rc, nx + rc, ny + rc], fill=(*color, 224))
         u_t = max(0.0, min(1.0, (speed - size * 0.03) / (size * 0.22)))
         p_pool = 0.58 - 0.40 * u_t
         p_spray = 0.08 + 0.34 * u_t

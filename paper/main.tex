@@ -106,7 +106,7 @@ Figure~\ref{fig:modes} contrasts how these two paradigms handle prime powers ($2
 \subsection{Generative-Grammar Variants}
 In the spirit of \citet{franke1993generative}, where explicit mathematical rules govern generative visual composition, we first define two factor-driven grammars:
 \begin{enumerate}
-  \item \textbf{Separate Strokes:} For a prime power $p_j^e$, each occurrence $k \in \{1, \dots, e\}$ paints an independent trajectory in $p_j$'s hue with lightness variation $L_0(k) = 42\% - 7\% \cdot ((k - 1) \bmod 3)$, using opaque \texttt{source-over} compositing.
+  \item \textbf{Separate Strokes:} For a prime power $p_j^e$, each occurrence $k \in \{1, \dots, e\}$ paints an independent trajectory in $p_j$'s hue with lightness variation $L_0(k) = 42\% - 7\% \cdot ((k - 1) \bmod 3)$, overwriting any underlying pixels opaquely (\texttt{source-over}).
   \item \textbf{Path Extent:} For a prime power $p_j^e$, $p_j$ paints a single continuous trajectory by extending the step index in~\eqref{eq:drip_angle}--\eqref{eq:drip_speed} to $t = 1, \dots, e\,T_{\mathrm{base}}$ (so the step count scales linearly as $32e$). Because the PRNG is sequential, the geometric and rasterized trajectory supports prior to occlusion by subsequent primes form a nested, prefix-preserving lineage $\operatorname{supp}(T_{p_j,1}) \subset \operatorname{supp}(T_{p_j,2}) \subset \operatorname{supp}(T_{p_j,3})$.
 \end{enumerate}
 Like kanji radicals or calligraphic components, these generative grammars preserve immediately legible visual parts, at the cost of requiring the prime-factor multiset $\{p_i^{e_i}\}$ prior to rendering (opaque crossings depend on draw order, and flat RGB images cannot extend strokes when $\gcd(a,b) > 1$).

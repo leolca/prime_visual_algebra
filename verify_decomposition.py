@@ -365,7 +365,7 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
             ))
         return modes
 
-    num_pts = 64
+    num_pts = 360
     ts = np.linspace(0.0, 1.0, num_pts + 1)
     prime_curves: Dict[int, np.ndarray] = {}
     for p in PRIMES:
@@ -403,14 +403,17 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
             for i in range(len(pts) - 1):
                 dist = math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
                 if dist <= span * 0.45:
-                    u_sp = min(1.0, dist / (size * 0.10))
+                    u_sp = min(1.0, dist / (size * 0.022))
                     lw = max(1, int(round((1.15 - u_sp) * (size * 0.036))))
                     draw.line([pts[i], pts[i + 1]], fill=col, width=lw)
-                    if rand_drip() < 0.35 - 0.28 * u_sp:
+                    if lw >= 3:
+                        rj = lw * 0.48
+                        draw.ellipse([pts[i][0] - rj, pts[i][1] - rj, pts[i][0] + rj, pts[i][1] + rj], fill=col)
+                    if rand_drip() < (0.35 - 0.28 * u_sp) * 0.22:
                         rr = max(1.0, lw * (0.55 + rand_drip() * 0.45))
                         ox, oy = pts[i + 1][0] + (rand_drip() - 0.5) * lw, pts[i + 1][1] + (rand_drip() - 0.5) * lw
                         draw.ellipse([ox - rr, oy - rr, ox + rr, oy + rr], fill=col)
-                    if rand_drip() < 0.05 + 0.22 * u_sp:
+                    if rand_drip() < (0.05 + 0.22 * u_sp) * 0.22:
                         for _ in range(1 + int(rand_drip() * 2)):
                             sx = pts[i + 1][0] + (rand_drip() - 0.5) * size * 0.12
                             sy = pts[i + 1][1] + (rand_drip() - 0.5) * size * 0.12
@@ -721,7 +724,7 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
             ))
         return modes
 
-    num_pts = 64
+    num_pts = 360
     ts = np.linspace(0.0, 1.0, num_pts + 1)
     prime_curves: Dict[int, np.ndarray] = {}
     for p in PRIMES:
@@ -759,14 +762,17 @@ def test_pollock_trajectory_homomorphism(max_n: int = 120, size: int = 100) -> N
             for i in range(len(pts) - 1):
                 dist = math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
                 if dist <= span * 0.45:
-                    u_sp = min(1.0, dist / (size * 0.10))
+                    u_sp = min(1.0, dist / (size * 0.022))
                     lw = max(1, int(round((1.15 - u_sp) * (size * 0.036))))
                     draw.line([pts[i], pts[i + 1]], fill=col, width=lw)
-                    if rand_drip() < 0.35 - 0.28 * u_sp:
+                    if lw >= 3:
+                        rj = lw * 0.48
+                        draw.ellipse([pts[i][0] - rj, pts[i][1] - rj, pts[i][0] + rj, pts[i][1] + rj], fill=col)
+                    if rand_drip() < (0.35 - 0.28 * u_sp) * 0.22:
                         rr = max(1.0, lw * (0.55 + rand_drip() * 0.45))
                         ox, oy = pts[i + 1][0] + (rand_drip() - 0.5) * lw, pts[i + 1][1] + (rand_drip() - 0.5) * lw
                         draw.ellipse([ox - rr, oy - rr, ox + rr, oy + rr], fill=col)
-                    if rand_drip() < 0.05 + 0.22 * u_sp:
+                    if rand_drip() < (0.05 + 0.22 * u_sp) * 0.22:
                         for _ in range(1 + int(rand_drip() * 2)):
                             sx = pts[i + 1][0] + (rand_drip() - 0.5) * size * 0.12
                             sy = pts[i + 1][1] + (rand_drip() - 0.5) * size * 0.12

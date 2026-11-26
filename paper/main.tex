@@ -91,33 +91,6 @@ Pollock's mature drip paintings abandon a single focal center in favor of an ``a
   \item \textbf{Identity element:} The unit $n = 1$ corresponds to the blank linen ground ($I_{\mathrm{bg}} = \texttt{\#f4efe6}$, RGB $(244, 239, 230)$).
 \end{itemize}
 
-Table~\ref{tab:params} summarizes the trajectory and color parameters used in the $1 \le n \le 120$ integer-factorization regime versus the $K$-bit single-canvas codec of Section~\ref{sec:codec}; the codec uses slightly shorter, thinner strokes and a wider margin to reduce inter-stroke overlap when $64$--$128$ primes share one canvas and to preserve border headroom under rotation and translation.
-
-\begin{table}[ht]
-  \centering
-  \caption{Pollock synthesis parameters across the integer-factorization regime (Sections~2--4) and the single-canvas message codec (Section~\ref{sec:codec}).}
-  \label{tab:params}
-  \footnotesize
-  \begin{tabular}{@{}llll@{}}
-    \toprule
-    Parameter & Factorization ($n \le 120$) & Codec Data ($K$ bits) & Codec Top-Skein ($T_0$) \\
-    \midrule
-    \multicolumn{4}{@{}l}{\emph{Canvas \& Trajectory}} \\
-    Canvas size $S \times S$ & $100 \times 100$ ($64$--$256$ ablation) & $512 \times 512$ & $512 \times 512$ (shared) \\
-    Margin & $8\%$ ($0.08S$) & $10\%$ ($0.10S$) & $12\%$ ($0.12S$) \\
-    Steps per stroke & $T_{\mathrm{base}} = 32$ & $28$ & $26$ \\
-    Speed range $v_t$ & $[0.03S, 0.25S]$ & $[0.025S, 0.18S]$ & $[0.025S, 0.18S]$ \\
-    Width scale & $0.048S$ ($\min 1$~px) & $0.022S$ ($\min 2$~px) & $0.028S$ ($\min 2$~px) \\
-    \addlinespace
-    \multicolumn{4}{@{}l}{\emph{Color \& Compositing}} \\
-    Opacity $\alpha$ (TMG) & $0.396$ & $0.50$ & $1.00$ (opaque) \\
-    Hue range & $[0^\circ, 360^\circ)$ & $[28^\circ, 330^\circ]$ & Crimson (\texttt{\#8b101c}) \\
-    Saturation & $72\% + (13j \bmod 18)\%$ & $66\% + (13j \bmod 18)\%$ & Fixed RGB $(139,16,28)$ \\
-    Lightness & $42\%$ ($-7\%((k{-}1)\bmod 3)$) & $43\%$ & Fixed RGB $(139,16,28)$ \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
 \section{Homomorphism vs.\ Generative Grammar}
 Let $(\mathbb{N}_{>0}, \cdot, 1)$ denote the multiplicative commutative monoid of positive integers, $\mathcal{I}$ a representation space equipped with a binary composition $\star$, and $\Phi : \mathbb{N}_{>0} \to \mathcal{I}$ an encoding map \citep{dummit2003abstract}. We call $\Phi$ a \emph{visual homomorphism} (i.e., a monoid homomorphism) if $\Phi(1) = I_{\mathrm{bg}}$ and $\Phi(a \cdot b) = \Phi(a) \star \Phi(b)$ for all $a, b \in \mathbb{N}_{>0}$, without inspecting the prime factors of $a$ or $b$. By contrast, a \emph{generative grammar} requires the prime-factor multiset $\{p_i^{e_i}\}$ prior to rendering. This algebraic divide is illustrated in Figure~\ref{fig:modes}:
 
@@ -243,7 +216,32 @@ To align rotated, translated, and scaled (RTS) canvases without external finder 
   where $L_i$ is prime $p_i$'s log-attenuation vector $-\log((1-\alpha) + \alpha C_{p_i})$ on its unoccluded stroke support $\operatorname{supp}(p_i) \setminus \operatorname{supp}(T_0)$. Solving the $K \times K$ ridge (Tikhonov) regression system $\hat{\mathbf{b}} = (G + 10^{-3} I_K)^{-1} \mathbf{y}$ (where $G_{ij} = \langle L_i, L_j \rangle$, $y_i = \langle L_i, L_{\mathrm{obs}} \rangle$, and $I_K$ is the $K \times K$ identity) decouples overlapping strokes and recovers each bit via $\hat{b}_i \ge 0.5$.
 \end{enumerate}
 
-The Gram matrix $G$ is well-conditioned: at $512 \times 512$, $\kappa(G) = 6.95$ for $K = 64$ (mean off-diagonal correlation $0.033$, max $0.142$) and $\kappa(G) = 11.37$ for $K = 128$ (mean $0.033$, max $0.170$), so $\lambda = 10^{-3}$ preserves $\kappa(G + 10^{-3}I_K) = 6.95$ and $11.37$ while stabilizing rare heavily occluded strokes.
+The Gram matrix $G$ is well-conditioned: at $512 \times 512$, $\kappa(G) = 6.95$ for $K = 64$ (mean off-diagonal correlation $0.033$, max $0.142$) and $\kappa(G) = 11.37$ for $K = 128$ (mean $0.033$, max $0.170$), so $\lambda = 10^{-3}$ preserves $\kappa(G + 10^{-3}I_K) = 6.95$ and $11.37$ while stabilizing rare heavily occluded strokes. Table~\ref{tab:params} summarizes the synthesis parameters of this $K$-bit single-canvas codec alongside the $1 \le n \le 120$ integer-factorization regime of Sections~2--4; the codec uses shorter, thinner strokes and a wider margin to reduce inter-stroke overlap when $64$--$128$ primes share one canvas and to preserve border headroom under rotation and translation.
+
+\begin{table}[ht]
+  \centering
+  \caption{Pollock synthesis parameters across the integer-factorization regime (Sections~2--4) and the single-canvas message codec (Section~\ref{sec:codec}).}
+  \label{tab:params}
+  \footnotesize
+  \begin{tabular}{@{}llll@{}}
+    \toprule
+    Parameter & Factorization ($n \le 120$) & Codec Data ($K$ bits) & Codec Top-Skein ($T_0$) \\
+    \midrule
+    \multicolumn{4}{@{}l}{\emph{Canvas \& Trajectory}} \\
+    Canvas size $S \times S$ & $100 \times 100$ ($64$--$256$ ablation) & $512 \times 512$ & $512 \times 512$ (shared) \\
+    Margin & $8\%$ ($0.08S$) & $10\%$ ($0.10S$) & $12\%$ ($0.12S$) \\
+    Steps per stroke & $T_{\mathrm{base}} = 32$ & $28$ & $26$ \\
+    Speed range $v_t$ & $[0.03S, 0.25S]$ & $[0.025S, 0.18S]$ & $[0.025S, 0.18S]$ \\
+    Width scale & $0.048S$ ($\min 1$~px) & $0.022S$ ($\min 2$~px) & $0.028S$ ($\min 2$~px) \\
+    \addlinespace
+    \multicolumn{4}{@{}l}{\emph{Color \& Compositing}} \\
+    Opacity $\alpha$ (TMG) & $0.396$ & $0.50$ & $1.00$ (opaque) \\
+    Hue range & $[0^\circ, 360^\circ)$ & $[28^\circ, 330^\circ]$ & Crimson (\texttt{\#8b101c}) \\
+    Saturation & $72\% + (13j \bmod 18)\%$ & $66\% + (13j \bmod 18)\%$ & Fixed RGB $(139,16,28)$ \\
+    Lightness & $42\%$ ($-7\%((k{-}1)\bmod 3)$) & $43\%$ & Fixed RGB $(139,16,28)$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \begin{figure}[t]
   \centering

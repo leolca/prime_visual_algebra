@@ -468,6 +468,121 @@ def decode_message_pollock(
     return out_bytes.decode("utf-8", errors="replace"), rec_bits
 
 
+# --- Pure-Python BCH(127, 92, t=5) over GF(2^7), primitive poly x^7 + x + 1 (0x83) ---
+_BCH_EXP = [0] * 256
+_BCH_LOG = [0] * 128
+_x = 1
+for _i in range(127):
+    _BCH_EXP[_i] = _x
+    _BCH_LOG[_x] = _i
+    _x <<= 1
+    if _x & 128:
+        _x ^= 0x83
+for _i in range(127, 256):
+    _BCH_EXP[_i] = _BCH_EXP[_i - 127]
+
+
+def _gf_mul(a: int, b: int) -> int:
+    return 0 if (a == 0 or b == 0) else _BCH_EXP[(_BCH_LOG[a] + _BCH_LOG[b]) % 127]
+
+
+def _gf_inv(a: int) -> int:
+    return _BCH_EXP[(127 - _BCH_LOG[a]) % 127]
+
+
+def _build_bch_127_92_gen() -> List[int]:
+    cosets = set()
+    g = [1]
+    for i in range(1, 11):
+        if i in cosets:
+            continue
+        c, cur = [], i % 127
+        while cur not in c:
+            c.append(cur)
+            cosets.add(cur)
+            cur = (cur * 2) % 127
+        mp = [1]
+        for j in c:
+            r = [0] * (len(mp) + 1)
+            aj = _BCH_EXP[j]
+            for k, coeff in enumerate(mp):
+                r[k + 1] ^= coeff
+                r[k] ^= _gf_mul(coeff, aj)
+            mp = r
+        prod = [0] * (len(g) + len(mp) - 1)
+        for ia, a in enumerate(g):
+            if a:
+                for ib, b in enumerate(mp):
+                    prod[ia + ib] ^= b
+        g = prod
+    return list(reversed(g))
+
+
+_BCH_GEN_HI = _build_bch_127_92_gen()
+
+
+def bch127_92_encode(msg_bits: List[int]) -> List[int]:
+    """Systematic BCH(127, 92, t=5) encoder: 92 data bits -> 127 codeword bits."""
+    if len(msg_bits) != 92:
+        raise ValueError(f"Expected 92 message bits, got {len(msg_bits)}")
+    rem = list(msg_bits) + [0] * 35
+    for i in range(92):
+        if rem[i]:
+            for j, gj in enumerate(_BCH_GEN_HI):
+                rem[i + j] ^= gj
+    return list(msg_bits) + rem[92:]
+
+
+def bch127_92_decode(rx_bits: List[int]) -> Tuple[List[int], int]:
+    """BCH(127, 92, t=5) decoder via Berlekamp-Massey and Chien search."""
+    if len(rx_bits) != 127:
+        raise ValueError(f"Expected 127 received bits, got {len(rx_bits)}")
+    S = []
+    for k in range(1, 11):
+        val, ak = 0, _BCH_EXP[k % 127]
+        for b in rx_bits:
+            val = _gf_mul(val, ak) ^ b
+        S.append(val)
+    if all(s == 0 for s in S):
+        return list(rx_bits[:92]), 0
+    C, B, L, m, b_prev = [1], [1], 0, 1, 1
+    for n in range(10):
+        d = S[n]
+        for i in range(1, L + 1):
+            if i < len(C):
+                d ^= _gf_mul(C[i], S[n - i])
+        if d == 0:
+            m += 1
+        else:
+            T = list(C)
+            coef = _gf_mul(d, _gf_inv(b_prev))
+            need = len(B) + m
+            if len(C) < need:
+                C.extend([0] * (need - len(C)))
+            for i, bi in enumerate(B):
+                if bi:
+                    C[i + m] ^= _gf_mul(coef, bi)
+            if 2 * L <= n:
+                L, B, b_prev, m = n + 1 - L, T, d, 1
+            else:
+                m += 1
+    if L > 5:
+        return list(rx_bits[:92]), -1
+    out, errs = list(rx_bits), 0
+    for pos in range(127):
+        x_inv = _BCH_EXP[(127 - pos) % 127]
+        val, p_pow = 0, 1
+        for ci in C:
+            val ^= _gf_mul(ci, p_pow)
+            p_pow = _gf_mul(p_pow, x_inv)
+        if val == 0:
+            out[126 - pos] ^= 1
+            errs += 1
+    if errs != L:
+        return list(rx_bits[:92]), -1
+    return out[:92], errs
+
+
 def run_monte_carlo(n_bits: int = 128, n_trials: int = 100, size: int = 512, alpha: float = 0.50) -> None:
     """Run Monte Carlo RTS + compression/noise benchmark for random n_bits messages."""
     precomp = build_log_decoder(n_bits, size=size, alpha=alpha)

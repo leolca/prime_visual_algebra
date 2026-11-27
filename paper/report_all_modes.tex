@@ -128,7 +128,7 @@ To bridge arithmetic structure with recognizable visual traditions, our painterl
 \end{itemize}
 
 \section{Painterly Superpositions}
-To explore richer color and compositional structure, we also investigate three generative painting systems where each prime $p$ seeds a deterministic pseudorandom generator (\texttt{mulberry32}):
+To explore richer color and compositional structure, we also investigate three generative painting systems where each prime $p$ seeds a deterministic pseudorandom generator (Mulberry32, using $I_{\mathrm{bg}} = \texttt{\#f4efe6}$ and trajectory-sum offset $\texttt{0x7f4a7c15}$):
 \begin{itemize}
   \item \textbf{Pollock Drip-Paths:} Each prime $p$ is assigned a hue via golden-angle spacing ($137.508^\circ$) and traces a momentum-driven quadratic B\'ezier trajectory with velocity-coupled stroke width and splatter droplets. Multiplicity $p^e$ can be encoded as $e$ separate strokes, as \emph{path extent} ($S \cdot e$ steps along the same trajectory, giving prime powers $p^1 \subset p^2 \subset p^3$ a prefix-preserving visual lineage), or in two true homomorphism variants: \emph{translucent \texttt{multiply} coats} ($A_p^e$, yielding a pixel-level homomorphism for all $a,b$) and \emph{toroidal Fourier trajectory addition} ($\gamma_n(t) \equiv \sum_i e_i \gamma_{p_i}(t) \pmod{1}$ on $[0,1)^2$, yielding a vector-space homomorphism $\gamma_{a\cdot b} \equiv \gamma_a + \gamma_b$).
   \item \textbf{Klee 1914 Watercolor:} Inspired by Paul Klee's 1914 watercolors, each prime paints a translucent \texttt{multiply}-blended band whose orientation alternates between horizontal and vertical by prime index, whose length scales with $e$, and which wraps across canvas edges by jumping a spacing proportional to its stroke width.

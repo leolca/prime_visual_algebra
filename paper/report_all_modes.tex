@@ -1,5 +1,6 @@
 \documentclass[]{interact}
 
+\usepackage[T1]{fontenc}
 \usepackage{epstopdf}
 \usepackage[caption=false]{subfig}
 \usepackage{amsmath,amssymb,amsthm}
@@ -231,7 +232,7 @@ A natural question is how far $N$ can be increased to store more bits per image,
   Rather than forcing a single tile to represent a huge integer, arbitrary byte streams can be split into fixed-range symbols (just as QR codes split data into finite-field symbols): mapping each byte $b \in \{0,\dots,255\}$ to $n = b + 1 \in \{1,\dots,256\}$ (or using $N=120$ for printable ASCII) allows any message to be rendered as a frieze or mosaic of artistic tiles. Figure~\ref{fig:leonardo} illustrates the 8-character word \texttt{"MathArts"} (ASCII codes $77, 97, 116, 104, 65, 114, 116, 115$, all within $N=120$) encoded across Organic Ink XOR-convolution, Pollock drip-paths, Klee watercolor, and Kandinsky \emph{Composition VIII}.
 
   \item \textbf{Scope and robustness.}
-  Although unbounded trajectory sums are hard to invert from a static bitmap once self-intersections accumulate, the underlying map $\mathbf{e} \mapsto \gamma_n$ is linear in the exponent vector and thus serves as an \emph{artistic watermark or visual code} rather than a cryptographic primitive. Likewise, our current blind decoders operate on lossless, pixel-aligned bitmaps; extending them to photographed or print-and-scan artworks requires adding corner fiducial markers for geometric registration and soft correlation thresholds for quantization noise.
+  Although unbounded trajectory sums are hard to invert from a static bitmap once self-intersections accumulate, the underlying map $\mathbf{e} \mapsto \gamma_n$ is linear in the exponent vector and thus serves as a \emph{visible artistic visual code} rather than a cryptographic primitive. Likewise, our current blind decoders operate on lossless, pixel-aligned bitmaps; extending them to photographed or print-and-scan artworks requires adding corner fiducial markers for geometric registration and soft correlation thresholds for quantization noise.
 \end{itemize}
 
 \begin{figure}[t]
@@ -242,7 +243,29 @@ A natural question is how far $N$ can be increased to store more bits per image,
 \end{figure}
 
 \subsection{Single-Canvas Pollock Encoding and RTS/Noise Resilience}
-As an extension of the Pollock \texttt{multiply} model, an entire $K$-bit string can also be encoded onto \emph{one unified $512 \times 512$ canvas} by mapping bit $i$ to prime $p_i$ (e.g., primes $2 \dots 311$ for $64$-bit \texttt{"MathArts"}, or $2 \dots 719$ for $128$ bits) and integrating an opaque crimson Pollock top-skein ($T_0$) for Fourier--Mellin (log-polar FFT) registration, paired with a log-attenuation linear solver $L_{\mathrm{obs}} = -\log(I/I_{\mathrm{bg}}) \approx \sum b_i L_i$. Across a $100$-trial Monte Carlo benchmark of random $128$-bit messages ($12{,}800$ bits per regime), this single-canvas codec achieves $100/100$ exact messages ($100.00\%$ bits) on clean canvases, $86/100$ exact messages ($99.69\%$ bits) under random rotation/translation/scaling (RTS) + JPEG ($q=80$), and $86/100$ exact messages ($99.72\%$ bits) under random RTS + additive Gaussian noise ($\sigma=8$), while recovering \texttt{"MathArts"} with $64/64$ exact bits in all tested regimes (Figure~\ref{fig:report_rts}).
+As an extension of the Pollock \texttt{multiply} model, an entire $K$-bit string can also be encoded onto \emph{one unified $512 \times 512$ canvas} by mapping bit $i$ to prime $p_i$ (e.g., primes $2 \dots 311$ for $64$-bit \texttt{"MathArts"}, or $2 \dots 719$ for $128$ bits; PRNG seed $(p_j \cdot 2654435761) \oplus \texttt{0x40503311}$, distinct from the decimal $40503311$ offset of the integer-factorization regime) and integrating an opaque Venetian crimson Pollock top-skein ($T_0$, PRNG seed $\texttt{0x20261124}$, $\#\texttt{8b101c}$) for Fourier--Mellin registration ($0.25\times$ downsampled $S_{\mathrm{reg}} = 128$ grid, $180 \times 96$ log-polar FFT with $r \in [3, 0.45 S_{\mathrm{reg}}]$, local refinement over $0.25^\circ$ and $\pm 1.5\%$ steps $\{0.985, 0.992, 1.0, 1.008, 1.015\}$, and $\pm 24$~px full-resolution translation polish), paired with a log-attenuation linear solver $L_{\mathrm{obs}} = -\log(I/I_{\mathrm{bg}}) \approx \sum b_i L_i$ ($\lambda = 10^{-3}$). Table~\ref{tab:report_params} records all empirical synthesis constants for both the integer-factorization and single-canvas message regimes. Across a $100$-trial Monte Carlo benchmark of random $128$-bit messages ($12{,}800$ bits per regime), this single-canvas codec achieves $100/100$ exact messages ($100.00\%$ bits) on clean canvases, $86/100$ exact messages ($99.69\%$ bits) under random rotation/translation/scaling (RTS) + JPEG ($q=80$), and $86/100$ exact messages ($99.72\%$ bits) under random RTS + additive Gaussian noise ($\sigma=8$), while recovering \texttt{"MathArts"} with $64/64$ exact bits in all tested regimes (Figure~\ref{fig:report_rts}).
+
+\begin{table}[ht]
+  \centering
+  \caption{Empirical Pollock synthesis parameters across the integer-factorization regime ($1 \le n \le 120$) and the single-canvas message codec ($512 \times 512$).}
+  \label{tab:report_params}
+  \footnotesize
+  \begin{tabular}{@{}llll@{}}
+    \toprule
+    Parameter & Factorization ($n \le 120$) & Codec Data ($K$ bits) & Codec Top-Skein ($T_0$) \\
+    \midrule
+    Canvas size $S \times S$ & $100 \times 100$ ($64$--$256$ ablation) & $512 \times 512$ & $512 \times 512$ (shared) \\
+    Margin & $8\%$ ($0.08S$) & $10\%$ ($0.10S$) & $12\%$ ($0.12S$) \\
+    Steps per stroke & $T_{\mathrm{base}} = 32$ & $28$ & $26$ \\
+    Speed range $v_t$ & $[0.03S, 0.25S]$ & $[0.025S, 0.18S]$ & $[0.025S, 0.18S]$ \\
+    Width scale & $0.048S$ ($\min 1$~px) & $0.022S$ ($\min 2$~px) & $0.028S$ ($\min 2$~px) \\
+    Opacity $\alpha$ (TMG) & $0.396$ & $0.50$ & $1.00$ (opaque) \\
+    Hue range & $[0^\circ, 360^\circ)$ & $[28^\circ, 330^\circ]$ & Crimson (\texttt{\#8b101c}) \\
+    Saturation & $72\% + (13j \bmod 18)\%$ & $66\% + (13j \bmod 18)\%$ & Fixed RGB $(139,16,28)$ \\
+    Lightness & $42\%$ ($-7\%((k{-}1)\bmod 3)$) & $43\%$ & Fixed RGB $(139,16,28)$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \begin{figure}[t]
   \centering
